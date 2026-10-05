@@ -62,15 +62,27 @@ jobs:
           fi
         continue-on-error: true
 
+      # Open interest only settles overnight, but volume moves all session and
+      # the whole chain is one request per underlying, so PCR rides the same
+      # minute cadence rather than earning a third pinger.
+      - name: Refresh the put-call ratios
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python3 scripts/fetch_pcr.py --force
+          else
+            python3 scripts/fetch_pcr.py
+          fi
+        continue-on-error: true
+
       - name: Commit if the snapshot changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- board_data.json data/spot.json; then
+          if git diff --quiet -- board_data.json data/spot.json data/pcr.json; then
             echo "nothing changed - nothing to commit"
             exit 0
           fi
-          git add board_data.json data/spot.json
+          git add board_data.json data/spot.json data/pcr.json
           # Pull with rebase before pushing: the daily RRG job commits to the
           # same branch, and a per-minute writer that assumes it is alone will
           # eventually lose a race with it.

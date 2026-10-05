@@ -1,0 +1,102 @@
+/* Put-call ratio board. Layered on app.css (palette, topbar, controls) and
+   ema.css (the table shell, reused by the term structure). */
+
+.pcr-cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));
+  gap:12px;
+  margin:14px 0 22px;
+}
+.pcr-card{
+  border:1px solid var(--line, #23262d);
+  border-radius:10px;
+  background:var(--panel, #15171c);
+  padding:12px 13px;
+}
+.pcr-card header{
+  display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
+  padding-bottom:9px; margin-bottom:4px;
+  border-bottom:1px solid var(--line, #23262d);
+}
+.pcr-card h3{
+  margin:0; font:700 14px/1.2 'IBM Plex Sans Condensed', sans-serif;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+.pcr-card .px{
+  font-family:'IBM Plex Mono', monospace; font-size:13px; font-weight:600;
+  color:var(--text, #e8eaed);
+}
+.pcr-card .dl{ font-family:'IBM Plex Mono', monospace; font-size:12px; }
+.pcr-card .dl.up{ color:var(--up, #4caf7d); }
+.pcr-card .dl.down{ color:var(--down, #e0575b); }
+.pcr-card .kind{
+  margin-left:auto; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+
+.pcr-row{
+  display:grid;
+  grid-template-columns:1fr auto;
+  grid-template-areas:"when val" "legs val";
+  align-items:center; gap:2px 10px;
+  padding:9px 0;
+  border-bottom:1px solid var(--line-soft, rgba(255,255,255,.05));
+}
+.pcr-row:last-of-type{ border-bottom:0; }
+.pcr-when{ grid-area:when; display:flex; flex-direction:column; }
+.pcr-when .t{ font-weight:600; font-size:12px; }
+.pcr-when .e{
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+.pcr-legs{
+  grid-area:legs; display:flex; gap:9px; flex-wrap:wrap;
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+.pcr-legs .k{ opacity:.7; }
+.pcr-val{
+  grid-area:val;
+  font-family:'IBM Plex Mono', monospace;
+  font-size:22px; font-weight:700; line-height:1;
+  padding:7px 10px; border-radius:7px; min-width:78px; text-align:center;
+}
+.pcr-note{
+  margin-top:7px; padding-top:7px;
+  border-top:1px solid var(--line-soft, rgba(255,255,255,.05));
+  font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+
+.sect-h{
+  font:700 12px/1.2 'IBM Plex Sans Condensed', sans-serif;
+  letter-spacing:.07em; text-transform:uppercase;
+  color:var(--text, #e8eaed);
+  margin:20px 0 8px;
+}
+.sect-h span{
+  font-weight:500; letter-spacing:0; text-transform:none;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+.term-wrap{
+  border:1px solid var(--line, #23262d);
+  border-radius:10px; overflow:auto; max-height:60vh;
+  margin-bottom:18px;
+}
+.term-table td.sym{ font-family:'IBM Plex Mono', monospace; font-weight:600; }
+.pill{
+  display:inline-block; min-width:50px; padding:3px 7px; border-radius:5px;
+  font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:12px;
+}
+
+/* The PCR colour scale reuses the board palette so one colour means one thing
+   everywhere, but the THRESHOLDS are PCR thresholds, set in pcr.html. */
+.pcr-val.b-na, .pill.b-na{ color:var(--text-dim, var(--dim, #8a8f9a)); }
+
+@media (max-width: 560px){
+  .pcr-val{ font-size:18px; min-width:64px; }
+}
+.pcr-card .dl.stale{
+  color:var(--text-dim, var(--dim, #8a8f9a));
+  font-size:10.5px; font-style:italic; cursor:help;
+}

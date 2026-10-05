@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>US Put-Call Ratio</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/app.css?v=20261005a">
+<link rel="stylesheet" href="assets/ema.css?v=20261005a">
+<link rel="stylesheet" href="assets/pcr.css?v=20261005a">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>US &middot; Put-Call Ratio</h1>
+      <span class="sub">Open interest and volume across the whole option chain, by expiry</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Heatmap</a>
+      <a href="rrg.html">RRG<span class="beta">Beta</span></a>
+      <a href="ema.html">44 EMA</a>
+      <a href="pcr.html" class="active">PCR</a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a href="../nifty-pcr-tracker/" class="away">India</a>
+    </nav>
+  </div>
+
+  <div class="meta-row">
+    <div class="controls" id="ctl">
+      <span class="lbl">Basis</span>
+      <button type="button" data-basis="oi" class="active">Open interest</button>
+      <button type="button" data-basis="vol">Volume</button>
+      <span class="lbl">Scope</span>
+      <button type="button" data-scope="full" class="active">Whole chain</button>
+      <button type="button" data-scope="band">ATM band</button>
+    </div>
+    <div class="status" id="statusTag"><span class="live-dot"></span><span id="statusText">Loading…</span></div>
+  </div>
+
+  <div class="pcr-cards" id="cards"></div>
+
+  <h2 class="sect-h">Term structure <span>— every live expiry, nearest first</span></h2>
+  <div class="term-wrap" id="term"></div>
+
+  <div class="footnote">
+    <strong>The whole chain, not a window — and that is the difference from the India board.</strong>
+    That one scrapes Sensibull because NSE's own site is blocked, and a scrape returns only what the
+    page renders: roughly &plusmn;6.7% around ATM for NIFTY. Its band reading is a limitation dressed
+    as a choice. CBOE publishes every contract as plain JSON on a public CDN — 29,282 SPX contracts
+    in one request, open interest and volume on each — so here the <strong>whole-chain</strong> ratio
+    is the headline and the band is secondary, which is the right way round.
+    <br><br>
+    <strong>The two scopes usually disagree, and the gap is the point.</strong> The whole chain
+    includes far out-of-the-money puts bought as crash insurance, which inflate it; the ATM band is
+    near-the-money positioning. A whole-chain reading far above the band one says the hedging is
+    happening well below the market, not that anyone expects to trade there.
+    <br><br>
+    <strong>Open interest and volume answer different questions.</strong> Open interest is
+    positioning that has accumulated and only settles overnight, so it barely moves intraday. Volume
+    is what traded today — more responsive, and noisy in the first half-hour. Both are published
+    rather than one being picked for you.
+    <br><br>
+    <strong>What this is not.</strong> A put-call ratio is a positioning statistic, not a signal, and
+    index puts in particular are bought as hedges against portfolios the ratio cannot see — so a high
+    reading is at least as likely to mean &ldquo;hedged&rdquo; as &ldquo;bearish&rdquo;. Nothing here
+    is backtested, and the strategy work in this stack has repeatedly found that readings like this
+    one do not survive as entry filters.
+    <br><br>
+    SPX, NDX and RUT now list <em>daily</em> expiries, so the nearest expiry is often zero days out.
+    A 0DTE row carries open interest that largely settled at yesterday's close while its volume is
+    entirely today's — the two halves of that row are not the same age, and the days-to-expiry is
+    shown on every row so it is never ambiguous.
+  </div>
+  <div class="disclaimer">Option data: Cboe delayed quotes (public CDN; delayed and may be inaccurate). For information only &mdash; not investment advice, and not a recommendation to buy, sell or hold any security. Verify with your broker before acting. <a href="privacy.html" style="color:inherit">Privacy policy</a></div>
+</div>
+
+<script src="assets/app.js?v=20261005a"></script>
+<script>
+let D=null, basis='oi', scope='full';
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const n2 = v => (v===null||v===undefined||!isFinite(v)) ? '—' : v.toFixed(2);
+const big = v => (v===null||v===undefined) ? '—' : v.toLocaleString('en-US');
+
+/* One scale for every PCR on the page. Centred on 1.00 - equal open interest
+   either side - rather than on a "neutral zone" nobody can defend. The bands
+   are wide on purpose: a ratio of 1.05 is not meaningfully different from 0.95
+   and colouring it as though it were would invent precision. */
+function pcrBucket(v){
+  if(v===null||v===undefined) return 'b-na';
+  if(v >= 1.6) return 'b-strong-gain';
+  if(v >= 1.2) return 'b-gain-2';
+  if(v > 0.85) return 'b-flat';
+  if(v > 0.6)  return 'b-loss-2';
+  return 'b-strong-loss';
+}
+function pick(block){
+  if(!block) return null;
+  const src = (scope === 'band') ? block.band : block;
+  if(!src) return null;
+  return basis === 'vol' ? src.pcrVolume : src.pcr;
+}
+function legs(block){
+  if(!block) return ['—','—'];
+  if(scope === 'band') return ['—','—'];   // band leg totals are not published
+  return basis === 'vol'
+    ? [big(block.putVolume), big(block.callVolume)]
+    : [big(block.putOI), big(block.callOI)];
+}
+
+function cardHtml(u){
+  const near = u.nearest, mon = u.monthly;
+  const row = (ttl, b) => {
+    const v = pick(b);
+    const [p, c] = legs(b);
+    return `<div class="pcr-row">
+      <div class="pcr-when"><span class="t">${ttl}</span>
+        <span class="e">${esc(b.expiry)} · ${b.dte}d</span></div>
+      <div class="pcr-val ${pcrBucket(v)}">${n2(v)}</div>
+      <div class="pcr-legs"><span>P ${p}</span><span>C ${c}</span>
+        <span class="k">${b.strikes} strikes</span></div>
+    </div>`;
+  };
+  const up = (u.chgPct ?? 0) >= 0;
+  return `<section class="pcr-card">
+    <header>
+      <h3>${esc(u.label)}</h3>
+      <span class="px">${u.spot.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+      ${u.chgPct===null||u.chgPct===undefined
+        ? (u.quoteStale ? `<span class="dl stale" title="Cboe's delayed quote for this underlying has not ticked yet this session, so no change figure is shown rather than a fabricated zero. The option data beside it is current.">no tick yet</span>` : '')
+        : `<span class="dl ${up?'up':'down'}">${up?'+':''}${n2(u.chgPct)}%</span>`}
+      <span class="kind">${u.kind === 'index' ? 'index options' : 'ETF options'}</span>
+    </header>
+    ${row('Nearest', near)}
+    ${row('Monthly', mon)}
+    ${scope === 'band' ? `<div class="pcr-note">ATM band: ${big(near.band.low)}–${big(near.band.high)},
+       ${near.band.strikes} of ${near.band.wanted} strikes around ${big(near.band.atm)}</div>` : ''}
+  </section>`;
+}
+
+function termHtml(){
+  const keys = Object.keys(D.underlyings);
+  const all = new Map();
+  keys.forEach(k => (D.underlyings[k].term || []).forEach(t => {
+    if(!all.has(t.expiry)) all.set(t.expiry, {expiry: t.expiry, dte: t.dte, by: {}});
+    all.get(t.expiry).by[k] = t;
+  }));
+  const rows = [...all.values()].sort((a,b) => a.dte - b.dte);
+  if(!rows.length) return '';
+  return `<table class="ema-table term-table"><thead><tr>
+      <th>Expiry</th><th class="num">DTE</th>
+      ${keys.map(k => `<th class="num">${esc(D.underlyings[k].label)}</th>`).join('')}
+    </tr></thead><tbody>
+    ${rows.map(r => `<tr>
+      <td class="sym">${esc(r.expiry)}</td>
+      <td class="num dim">${r.dte}</td>
+      ${keys.map(k => {
+        const t = r.by[k];
+        if(!t) return '<td class="num dim">—</td>';
+        const v = basis === 'vol' ? t.pcrVolume : t.pcr;
+        return `<td class="num"><span class="pill ${pcrBucket(v)}">${n2(v)}</span></td>`;
+      }).join('')}
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function paint(){
+  if(!D) return;
+  document.getElementById('cards').innerHTML =
+    Object.values(D.underlyings).map(cardHtml).join('');
+  document.getElementById('term').innerHTML = termHtml();
+}
+
+function wire(attr, set){
+  document.querySelectorAll(`#ctl button[${attr}]`).forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll(`#ctl button[${attr}]`).forEach(o =>
+        o.classList.toggle('active', o === b));
+      set(b.getAttribute(attr));
+      paint();
+    });
+  });
+}
+wire('data-basis', v => { basis = v; });
+wire('data-scope', v => { scope = v; });
+
+async function load(){
+  try{
+    const r = await fetch('data/pcr.json?t=' + Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    D = await r.json();
+    const g = new Date(D.generatedAt);
+    const fmt = g.toLocaleString('en-US', {timeZone:'America/New_York',
+      day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+    const any = Object.values(D.underlyings)[0];
+    setStatus(`Read ${fmt} ET`
+      + (any && any.sourceTime ? ` · Cboe feed ${esc(any.sourceTime)} UTC` : ''), false);
+    paint();
+  }catch(e){
+    setStatus('Could not reach data/pcr.json', true);
+  }
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
