@@ -8,13 +8,18 @@ way as the Indian boards (`nifty-heatmap-web`, `nifty-ema-board`,
 
 ## What is here
 
-| Page | What it shows | Status |
-|---|---|---|
-| `rrg.html` | Relative Rotation — sectors, 503 stocks, 112 ETFs, 8 ETF groups | **live** |
-| `index.html` | S&P 500 heatmap + movers | planned |
-| `sectors.html` | Sector board | planned |
-| `ema.html` | 44 EMA proximity + Point & Figure | planned |
-| `pcr.html` | Put-call ratio | planned |
+| Page | What it shows | Data | Cadence |
+|---|---|---|---|
+| `index.html` | Heatmap: 4 index cards, movers, 11 GICS sector blocks each backed by its SPDR, 8 ETF group blocks | `board_data.json` | minute |
+| `rrg.html` | Relative Rotation — sectors, stocks, ETFs, ETF groups; 2D + 3D | `rrg_data.json` | daily |
+| `ema.html` | 44 EMA distance, EMA ladder, 52-week position, Point & Figure at two speeds | `data/levels.json`, `data/spot.json`, `data/pnf.json` | daily + minute |
+| `pcr.html` | Put-call ratio by expiry, whole chain and ATM band, OI and volume | `data/pcr.json` | minute |
+
+There is no separate sector board: `index.html` covers both with a Show toggle.
+There is no rollover board either, and that is deliberate — US equity options
+carry no monthly rollover convention, so the Indian measure has no honest
+counterpart and imitating it would produce a number that looks meaningful and
+is not.
 
 ## Universe
 
@@ -50,6 +55,18 @@ for the measured distribution either side of that line.
 gaps are printed in the build log and left alone. The single exception is a
 separation Yahoo has not yet published, entered by hand in `OVERRIDES` against
 the company's own filing — currently Corteva's Vylor spin-off of 2026-10-01.
+
+## Option data
+
+`pcr.html` reads Cboe's public delayed-quote CDN, which returns the ENTIRE
+chain as plain JSON — 29,282 SPX contracts in one request, with open interest
+and volume on each. The Indian tracker has to drive Sensibull through
+Playwright and gets only the strikes the page renders (about ±6.7% around ATM),
+so its band reading is a limitation rather than a choice. Here the whole-chain
+ratio is the headline and the band is secondary.
+
+Yahoo's own options endpoint returns HTTP 401 without a cookie+crumb pair and
+is not used.
 
 ## Build
 
