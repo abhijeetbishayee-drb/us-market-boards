@@ -1,0 +1,195 @@
+/* 44 EMA board. Layered on app.css, which owns the palette, the topbar, the
+   control chrome and the footnotes - this file adds only the table, the EMA
+   ladder, the 52-week marker and the Point & Figure grid.
+
+   Every colour here is a var() with a fallback, because app.css has been
+   through several naming generations and a hard-coded hex would silently stop
+   following the theme. */
+
+.table-wrap{
+  margin:14px 0 18px;
+  border:1px solid var(--line, #23262d);
+  border-radius:10px;
+  overflow:auto;
+  max-height:72vh;
+}
+table.ema-table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  font-size:13px;
+}
+.ema-table thead th{
+  position:sticky; top:0; z-index:2;
+  background:var(--panel, #15171c);
+  border-bottom:1px solid var(--line, #23262d);
+  padding:9px 10px;
+  text-align:left;
+  font:600 11px/1.3 'IBM Plex Sans Condensed', sans-serif;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--text-dim, var(--dim, #8a8f9a));
+  cursor:pointer;
+  white-space:nowrap;
+}
+.ema-table thead th.num{ text-align:right; }
+.ema-table thead th:hover{ color:var(--text, #e8eaed); }
+.ema-table thead th.sorted{ color:var(--accent, #d8a657); }
+.ema-table thead th .hint{
+  display:block; font-weight:500; letter-spacing:0; text-transform:none;
+  font-size:10px; opacity:.6;
+}
+.ema-table td{
+  padding:7px 10px;
+  border-bottom:1px solid var(--line-soft, rgba(255,255,255,.05));
+  white-space:nowrap;
+}
+.ema-table td.num{ text-align:right; font-family:'IBM Plex Mono', monospace; }
+.ema-table tbody tr:hover{ background:rgba(255,255,255,.035); }
+.ema-table tr.stale{ opacity:.55; }
+.ema-table td.sym a{ color:var(--text, #e8eaed); text-decoration:none; font-weight:600; }
+.ema-table td.sym a:hover{ color:var(--accent, #d8a657); }
+.ema-table td.grp{ color:var(--text-dim, var(--dim, #8a8f9a)); font-size:12px; }
+.ema-table td.dim{ color:var(--text-dim, var(--dim, #8a8f9a)); }
+.ema-table td.dist{ font-weight:700; }
+.ema-table td.dist.up{ color:var(--up, #4caf7d); }
+.ema-table td.dist.down{ color:var(--down, #e0575b); }
+
+/* ── EMA ladder ────────────────────────────────────────────────────────
+   Seven blocks, fast to slow. Filled = price above that EMA, hollow = below,
+   blank = the EMA has not warmed up over enough history to be trusted. The
+   three states are deliberately distinguishable without colour alone. */
+.ladder{ display:inline-flex; gap:2px; vertical-align:middle; }
+.ladder .rung{
+  width:9px; height:15px; border-radius:2px; display:inline-block;
+  border:1px solid transparent;
+}
+.ladder .rung.on{ background:var(--up, #4caf7d); }
+.ladder .rung.off{ border-color:var(--down, #e0575b); opacity:.75; }
+.ladder .rung.none{
+  border-color:var(--line, #23262d);
+  background:repeating-linear-gradient(45deg,
+    transparent 0 2px, var(--line, #23262d) 2px 3px);
+}
+
+/* ── 52-week position ─────────────────────────────────────────────── */
+.p52{ display:inline-flex; align-items:center; gap:6px; }
+.p52-bar{
+  position:relative; width:58px; height:4px; border-radius:2px;
+  background:var(--line, #23262d);
+}
+.p52-bar i{
+  position:absolute; top:-3px; width:2px; height:10px; border-radius:1px;
+  background:var(--accent, #d8a657); transform:translateX(-1px);
+}
+.p52-n{ font-size:11px; color:var(--text-dim, var(--dim, #8a8f9a)); min-width:30px; }
+
+/* ── PnF chips ────────────────────────────────────────────────────── */
+td.pnf{ display:flex; gap:4px; }
+.pnf-chip{
+  font:700 11px/1 'IBM Plex Mono', monospace;
+  padding:4px 6px; border-radius:4px; cursor:pointer;
+  border:1px solid transparent; background:transparent;
+}
+.pnf-chip.x{ color:var(--up, #4caf7d); border-color:rgba(76,175,125,.35); }
+.pnf-chip.o{ color:var(--down, #e0575b); border-color:rgba(224,87,91,.35); }
+.pnf-chip:not(:disabled):hover{ background:rgba(255,255,255,.07); }
+.pnf-chip:disabled{ cursor:default; opacity:.45; }
+.pnf-na{ color:var(--text-dim, var(--dim, #8a8f9a)); }
+
+/* ── multi-pick group filter ───────────────────────────────────────── */
+.pick-wrap{ position:relative; display:inline-block; }
+button.pick{ min-width:120px; text-align:left; }
+.pick-menu{
+  position:absolute; top:calc(100% + 4px); left:0; z-index:40;
+  background:var(--panel, #15171c);
+  border:1px solid var(--line, #23262d);
+  border-radius:8px; padding:6px;
+  max-height:320px; overflow:auto; min-width:220px;
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+}
+.pick-menu label{
+  display:flex; gap:8px; align-items:center;
+  padding:5px 7px; border-radius:5px; cursor:pointer;
+  font-size:12px; color:var(--text, #e8eaed);
+}
+.pick-menu label:hover{ background:rgba(255,255,255,.06); }
+.pick-actions{ border-top:1px solid var(--line, #23262d); margin-top:5px; padding-top:5px; }
+#filters input[type="search"]{
+  background:var(--panel, #15171c);
+  border:1px solid var(--line, #23262d);
+  border-radius:6px; padding:5px 9px; min-width:150px;
+  color:var(--text, #e8eaed); font-size:12px;
+}
+
+/* ── PnF modal ─────────────────────────────────────────────────────── */
+.pnf-modal{
+  position:fixed; inset:0; z-index:100;
+  background:rgba(0,0,0,.66);
+  display:flex; align-items:center; justify-content:center; padding:18px;
+}
+.pnf-modal[hidden]{ display:none; }
+.pnf-sheet{
+  background:var(--panel, #15171c);
+  border:1px solid var(--line, #23262d);
+  border-radius:12px;
+  max-width:min(960px, 96vw); width:100%;
+  max-height:92vh; display:flex; flex-direction:column;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+}
+.pnf-head{
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px; border-bottom:1px solid var(--line, #23262d);
+}
+.pnf-head h2{
+  margin:0; font:700 15px/1.2 'IBM Plex Sans Condensed', sans-serif;
+  letter-spacing:.02em;
+}
+.pnf-head h2 .sub2{
+  font-weight:500; font-size:12px; opacity:.6; margin-left:7px;
+}
+.pnf-head .controls{ margin-left:auto; }
+.pnf-close{
+  background:transparent; border:0; color:var(--text-dim, var(--dim, #8a8f9a));
+  font-size:22px; line-height:1; cursor:pointer; padding:0 4px;
+}
+.pnf-close:hover{ color:var(--text, #e8eaed); }
+.pnf-body{ padding:12px 14px; overflow:auto; }
+.pnf-foot{
+  padding:9px 14px; border-top:1px solid var(--line, #23262d);
+  font-size:11px; color:var(--text-dim, var(--dim, #8a8f9a));
+  font-family:'IBM Plex Mono', monospace;
+}
+.pnf-none{ color:var(--text-dim, var(--dim, #8a8f9a)); margin:0; }
+
+/* The grid sizes itself from --cell, set per chart in JS: one symbol ran to
+   692 boxes, and a fixed minimum cell would have made that a 1,384px column
+   nobody could see at once. */
+.pnf-grid{ display:inline-block; font-family:'IBM Plex Mono', monospace; }
+.pnf-row{ display:flex; align-items:center; height:var(--cell); }
+.pnf-px{
+  width:52px; flex:0 0 52px; text-align:right; padding-right:8px;
+  font-size:min(10px, calc(var(--cell) * 0.9));
+  color:var(--text-dim, var(--dim, #8a8f9a));
+}
+.pnf-cell{
+  width:var(--cw, var(--cell)); height:var(--cell);
+  flex:0 0 var(--cw, var(--cell));
+  display:flex; align-items:center; justify-content:center;
+  /* the glyph is bounded by the SHORTER side, so a wide cell never overflows */
+  font-size:calc(var(--cell) * 0.86); font-weight:700; line-height:1;
+}
+.pnf-cell.x{ color:var(--up, #4caf7d); }
+.pnf-cell.o{ color:var(--down, #e0575b); }
+
+@media (max-width: 760px){
+  .ema-table td.grp, .ema-table thead th[data-sort="group"]{ display:none; }
+  .ema-table{ font-size:12px; }
+  .p52-bar{ width:38px; }
+}
+
+/* A live price can sit outside the 52-week range built from COMPLETED bars -
+   a new extreme made today. The number stays honest (it may read -2% or 103%)
+   but the marker is clamped into the bar and flagged, rather than escaping it. */
+.p52-bar i.out{ background:var(--accent-2, var(--accent, #d8a657)); height:12px; top:-4px; width:3px; }
+.pnf-chip b{ font-weight:700; margin-right:1px; opacity:.95; }

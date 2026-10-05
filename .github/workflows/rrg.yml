@@ -1,4 +1,4 @@
-name: Rebuild US RRG
+name: Rebuild US boards (daily)
 
 # WHY workflow_dispatch AND NOT schedule.
 # GitHub throttles scheduled workflows hard: on the sibling Indian boards a
@@ -47,14 +47,22 @@ jobs:
             python3 scripts/build_rrg.py --if-stale
           fi
 
+      # Levels, 52-week extremes and the PnF grids are daily values for the
+      # same reason the RRG is, so they are rebuilt in the same post-close job.
+      # Not gated on --if-stale: unlike the RRG this is cheap to repeat and
+      # yfinance occasionally drops a symbol, so a second run is a repair.
+      - name: Rebuild the EMA board's levels and PnF
+        run: python3 scripts/daily_levels.py
+        continue-on-error: true
+
       - name: Commit if the data changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- rrg_data.json; then
-            echo "rrg_data.json unchanged - nothing to commit"
+          if git diff --quiet -- rrg_data.json data/levels.json data/pnf.json; then
+            echo "nothing changed - nothing to commit"
             exit 0
           fi
-          git add rrg_data.json
+          git add rrg_data.json data/levels.json data/pnf.json
           git commit -m "US RRG: rebuild for $(date -u +%Y-%m-%d)"
           git push

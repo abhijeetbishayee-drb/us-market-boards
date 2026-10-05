@@ -1,4 +1,4 @@
-name: Update US board
+name: Update US boards (minute)
 
 # WHY workflow_dispatch AND NOT schedule.
 # Measured on the sibling Indian boards: a high-frequency `schedule` asked for
@@ -49,15 +49,28 @@ jobs:
             python3 scripts/fetch_data.py
           fi
 
+      # The EMA board's spot file is the other minute-cadence artefact, and it
+      # is small. Running it in the SAME job means one pinger covers both
+      # boards rather than two, and the two files commit together instead of
+      # racing each other for the branch.
+      - name: Refresh the EMA board's spot prices
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python3 scripts/refresh_spot.py --force
+          else
+            python3 scripts/refresh_spot.py
+          fi
+        continue-on-error: true
+
       - name: Commit if the snapshot changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- board_data.json; then
-            echo "board_data.json unchanged - nothing to commit"
+          if git diff --quiet -- board_data.json data/spot.json; then
+            echo "nothing changed - nothing to commit"
             exit 0
           fi
-          git add board_data.json
+          git add board_data.json data/spot.json
           # Pull with rebase before pushing: the daily RRG job commits to the
           # same branch, and a per-minute writer that assumes it is alone will
           # eventually lose a race with it.

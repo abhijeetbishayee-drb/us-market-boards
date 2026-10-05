@@ -211,3 +211,38 @@ def unexplained(ticker, pairs, events, threshold=LARGE_MOVE):
             continue
         out.append({"ticker": ticker, "date": day, "move": r - 1})
     return out
+
+
+def classify_ratio(r):
+    """Verdict from a bare float ratio, with no numerator/denominator to hand.
+
+    yfinance's `actions=True` exposes splits as a single float on the price
+    frame - 2.39, 1.323, 0.3333 - which is free (no extra request) but loses
+    the 'a:b' string the chart endpoint carries. The same rule still applies:
+    a DECLARED split is a simple rational on both sides, a SPIN-OFF adjustment
+    is an ugly one, so the float is pushed back to its simplest fraction and
+    tested there.
+
+        3:2   -> 1.5    -> Fraction 3/2 exactly          -> split
+        1:3   -> 0.3333 -> Fraction 1/3 exactly          -> split
+        239:100 -> 2.39 -> nearest simple is 43/18       -> spin-off, 58.2%
+        1253:1000 -> 1.253 -> nearest simple is 24/19    -> spin-off, 20.2%
+
+    Returns (kind, removed) where kind is 'split' | 'cosmetic' | 'economic'.
+
+    This exists so the EMA board and the RRG cannot disagree about a name. The
+    first version of the EMA build reused the RRG's LARGE_MOVE pre-filter to
+    decide whom to look up, which was wrong in a way that is worth recording:
+    Yahoo BACK-ADJUSTS a spin-off, so the parent's series has no gap at all and
+    the filter never fired. DuPont kept five years of history belonging to a
+    company 58% larger, on the one board where that feeds a 44 EMA.
+    """
+    from fractions import Fraction
+    if not r or r <= 0:
+        return None, None
+    f = Fraction(r).limit_denominator(SIMPLE_DEN)
+    if (abs(float(f) - r) < 1e-6
+            and f.numerator <= SIMPLE_NUM and f.denominator <= SIMPLE_DEN):
+        return "split", None
+    removed = 1 - 1 / r
+    return ("economic" if removed >= ECONOMIC_SPLIT else "cosmetic"), removed
