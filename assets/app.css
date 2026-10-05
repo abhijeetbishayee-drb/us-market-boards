@@ -1,0 +1,650 @@
+/* Shared by index.html, sectors.html and rrg.html. Those pages load this file
+   (and app.js) as ?v=YYYYMMDD - bump that in all three when either asset
+   changes, or browsers and the Android app's WebView keep the old copy for up
+   to GitHub Pages' 10-minute cache lifetime while the new HTML has arrived. */
+:root{
+    --bg:#f4f3ef;
+    --panel:#ffffff;
+    --panel-2:#faf9f6;
+    --border:#e1ddd2;
+    --text:#1b1a17;
+    --text-dim:#726d5f;
+    --accent:#9a6b06;
+
+    --b-strong-gain:#1f8a4c; --b-strong-gain-tx:#ffffff;
+    --b-gain-3:#2f9d55;      --b-gain-3-tx:#ffffff;
+    --b-gain-2:#4bad63;      --b-gain-2-tx:#0d2414;
+    --b-gain-1:#8fc79b;      --b-gain-1-tx:#12321c;
+    --b-flat:#cabf8e;        --b-flat-tx:#2c2712;
+    --b-loss-1:#e4a09a;      --b-loss-1-tx:#3a0f0b;
+    --b-loss-2:#d4655c;      --b-loss-2-tx:#ffffff;
+    --b-loss-3:#b8362d;      --b-loss-3-tx:#ffffff;
+    --b-strong-loss:#8f1f18; --b-strong-loss-tx:#ffffff;
+    --b-na:#d8d4c8;          --b-na-tx:#726d5f;
+
+    --live-dot:#2f9d55;
+    --info:#2f5fa8; --info-tx:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b0c0d; --panel:#141517; --panel-2:#191a1d; --border:#2a2c30;
+      --text:#eceae4; --text-dim:#8b8a83; --accent:#e8b84a;
+      --info:#4d84e2; --info-tx:#08122a;
+      --b-strong-gain:#0e8a45; --b-strong-gain-tx:#eafff0;
+      --b-gain-3:#159650;      --b-gain-3-tx:#eafff0;
+      --b-gain-2:#238f52;      --b-gain-2-tx:#eafff0;
+      --b-gain-1:#356b48;      --b-gain-1-tx:#dcf3e2;
+      --b-flat:#5c5530;        --b-flat-tx:#f1ecd4;
+      --b-loss-1:#6e2a26;      --b-loss-1-tx:#fce3e0;
+      --b-loss-2:#8a231e;      --b-loss-2-tx:#fde5e3;
+      --b-loss-3:#9c1912;      --b-loss-3-tx:#ffe6e4;
+      --b-strong-loss:#7a120c; --b-strong-loss-tx:#ffe1de;
+      --b-na:#232427;          --b-na-tx:#7a7972;
+      --live-dot:#3ec46f;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0c0d; --panel:#141517; --panel-2:#191a1d; --border:#2a2c30;
+    --text:#eceae4; --text-dim:#8b8a83; --accent:#e8b84a;
+    --b-strong-gain:#0e8a45; --b-strong-gain-tx:#eafff0;
+    --b-gain-3:#159650;      --b-gain-3-tx:#eafff0;
+    --b-gain-2:#238f52;      --b-gain-2-tx:#eafff0;
+    --b-gain-1:#356b48;      --b-gain-1-tx:#dcf3e2;
+    --b-flat:#5c5530;        --b-flat-tx:#f1ecd4;
+    --b-loss-1:#6e2a26;      --b-loss-1-tx:#fce3e0;
+    --b-loss-2:#8a231e;      --b-loss-2-tx:#fde5e3;
+    --b-loss-3:#9c1912;      --b-loss-3-tx:#ffe6e4;
+    --b-strong-loss:#7a120c; --b-strong-loss-tx:#ffe1de;
+    --b-na:#232427;          --b-na-tx:#7a7972;
+    --live-dot:#3ec46f;
+    --info:#4d84e2; --info-tx:#08122a;
+  }
+
+  *{box-sizing:border-box;}
+  /* a class with display:flex/grid beats the UA sheet's [hidden] rule */
+  [hidden]{ display:none !important; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:1180px; margin:0 auto; padding:22px 20px 40px; }
+
+  .topbar{
+    display:flex; align-items:baseline; justify-content:space-between;
+    flex-wrap:wrap; gap:10px 24px; padding-bottom:16px;
+    border-bottom:1px solid var(--border); margin-bottom:16px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand h1{
+    font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:700;
+    font-size:22px; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--accent); margin:0;
+  }
+  .brand .sub{ font-size:12px; color:var(--text-dim); letter-spacing:0.03em; }
+  .index-readout{
+    display:flex; align-items:baseline; gap:10px;
+    font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+  }
+  .index-readout .idx-name{
+    font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600;
+    font-size:13px; color:var(--text-dim); letter-spacing:0.05em; text-transform:uppercase;
+  }
+  .index-readout .idx-price{ font-size:20px; font-weight:600; }
+  .index-readout .idx-delta{ font-size:14px; font-weight:600; padding:2px 8px; border-radius:3px; }
+  .idx-delta.up{ background:var(--b-gain-2); color:var(--b-gain-2-tx); }
+  .idx-delta.down{ background:var(--b-loss-2); color:var(--b-loss-2-tx); }
+
+  /* ── Index range cards ─────────────────────────── */
+  .indices-row{
+    display:grid; grid-template-columns:1fr 1fr; gap:16px;
+    margin-bottom:20px;
+  }
+  @media (max-width:560px){ .indices-row{ grid-template-columns:1fr; } }
+  .index-card{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:14px 18px 18px;
+  }
+  .index-card-head{
+    display:flex; flex-wrap:wrap; align-items:baseline;
+    gap:4px 12px; margin-bottom:14px;
+  }
+  .index-card-head .idx-name{ flex:1 1 auto; }
+  .index-card-head .idx-figures{
+    display:flex; align-items:baseline; gap:8px; flex-wrap:nowrap;
+  }
+  .idx-price{ white-space:nowrap; }
+  .idx-delta{ white-space:nowrap; }
+  .range-visual{ position:relative; height:58px; }
+  .range-visual .track-line{
+    position:absolute; top:40px; left:44px; right:44px; height:2px;
+    background:var(--border);
+  }
+  .range-visual .end-pill{
+    position:absolute; top:40px; transform:translateY(-50%);
+    font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600;
+    padding:5px 9px; border-radius:12px; white-space:nowrap;
+    background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);
+    font-variant-numeric:tabular-nums;
+  }
+  .range-visual .end-pill.low{ left:0; }
+  .range-visual .end-pill.high{ right:0; }
+  .range-visual .cur-dot{
+    position:absolute; top:40px; width:9px; height:9px; border-radius:50%;
+    background:var(--info); transform:translate(-50%,-50%);
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--info) 25%, transparent);
+  }
+  .range-visual .cur-stem{
+    position:absolute; top:24px; width:2px; height:16px;
+    background:var(--info); transform:translateX(-50%); opacity:0.55;
+  }
+  .range-visual .cur-pill{
+    position:absolute; top:0; transform:translateX(-50%);
+    background:var(--info); color:var(--info-tx); font-weight:700; font-size:12.5px;
+    padding:5px 10px; border-radius:14px; white-space:nowrap;
+    font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+  }
+
+  .meta-row{
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:8px 20px; margin-bottom:16px;
+    font-size:11.5px; color:var(--text-dim);
+  }
+  .status{ display:flex; align-items:center; gap:8px; font-family:"IBM Plex Mono",monospace; }
+  .live-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--live-dot);
+    box-shadow:0 0 0 0 var(--live-dot);
+    animation:pulse 2s infinite;
+  }
+  @media (prefers-reduced-motion:reduce){ .live-dot{ animation:none; } }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--live-dot) 55%, transparent); }
+    70%{ box-shadow:0 0 0 6px transparent; }
+    100%{ box-shadow:0 0 0 0 transparent; }
+  }
+  .status.stale .live-dot{ background:var(--b-loss-3); animation:none; }
+  /* amber = the scheduled rebuild has not run when it should have.
+     Distinct from .stale (red, the feed is unreachable): the data here
+     is readable and correct as of its own date, it is just not today's. */
+  .status.overdue .live-dot{ background:var(--q-weak); animation:none; }
+  .status.overdue #statusText{ color:var(--q-weak); }
+  .legend{ display:flex; align-items:center; gap:6px 5px; flex-wrap:wrap; }
+  .legend .chip{ width:16px; height:10px; border-radius:2px; }
+  .legend span.lbl{ margin:0 2px; }
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr));
+    gap:4px; margin-bottom:22px;
+  }
+  .tile{
+    border-radius:4px; padding:8px 10px 7px; min-height:92px;
+    display:flex; flex-direction:column; gap:5px;
+    transition:transform .12s ease, box-shadow .12s ease, background-color .4s ease;
+    color:inherit; text-decoration:none; cursor:pointer;
+  }
+  .tile:hover{ transform:translateY(-2px); box-shadow:0 4px 14px color-mix(in srgb, currentColor 22%, transparent); }
+  .tile:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+  .tile .name{ font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:12.5px; letter-spacing:0.01em; }
+  .tile .figures{ display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+  .tile .price{ font-family:"IBM Plex Mono",monospace; font-size:11px; font-variant-numeric:tabular-nums; opacity:0.92; }
+  .tile .pct{ font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:12.5px; font-variant-numeric:tabular-nums; }
+
+  .day-range{ margin-top:auto; }
+  .day-range .track{
+    position:relative; height:3px; border-radius:2px;
+    background:color-mix(in srgb, currentColor 28%, transparent);
+  }
+  .day-range .dot{
+    position:absolute; top:50%; width:7px; height:7px; border-radius:50%;
+    background:currentColor; transform:translate(-50%,-50%);
+    box-shadow:0 0 0 2px color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .day-range .labels{
+    display:flex; justify-content:space-between; margin-top:3px;
+    font-family:"IBM Plex Mono",monospace; font-size:8.5px;
+    font-variant-numeric:tabular-nums; opacity:0.8; letter-spacing:0.01em;
+  }
+
+  .b-strong-gain{ background:var(--b-strong-gain); color:var(--b-strong-gain-tx); }
+  .b-gain-3{ background:var(--b-gain-3); color:var(--b-gain-3-tx); }
+  .b-gain-2{ background:var(--b-gain-2); color:var(--b-gain-2-tx); }
+  .b-gain-1{ background:var(--b-gain-1); color:var(--b-gain-1-tx); }
+  .b-flat{ background:var(--b-flat); color:var(--b-flat-tx); }
+  .b-loss-1{ background:var(--b-loss-1); color:var(--b-loss-1-tx); }
+  .b-loss-2{ background:var(--b-loss-2); color:var(--b-loss-2-tx); }
+  .b-loss-3{ background:var(--b-loss-3); color:var(--b-loss-3-tx); }
+  .b-strong-loss{ background:var(--b-strong-loss); color:var(--b-strong-loss-tx); }
+  .b-na{ background:var(--b-na); color:var(--b-na-tx); }
+
+  .movers{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:520px){ .movers{ grid-template-columns:1fr; } }
+  .mover-panel{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:14px 16px; }
+  .mover-panel h2{
+    font-family:"IBM Plex Sans Condensed",sans-serif; font-size:12px; font-weight:700;
+    letter-spacing:0.08em; text-transform:uppercase; margin:0 0 10px;
+  }
+  .mover-panel.gainers h2{ color:var(--b-gain-3); }
+  .mover-panel.losers h2{ color:var(--b-loss-3); }
+  .mover-row{
+    padding:7px 0; border-bottom:1px solid var(--border);
+    font-family:"IBM Plex Mono",monospace; font-size:12.5px; font-variant-numeric:tabular-nums;
+  }
+  .mover-row:last-child{ border-bottom:none; }
+  .mover-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
+  .mover-row .m-name{ font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:13px; color:var(--text); }
+  .mover-row .m-price{ color:var(--text-dim); }
+  .mover-row .m-pct{ font-weight:700; min-width:64px; text-align:right; }
+  .gainers .m-pct{ color:var(--b-gain-3); }
+  .losers .m-pct{ color:var(--b-loss-3); }
+  .gainers .day-range{ color:var(--b-gain-3); }
+  .losers .day-range{ color:var(--b-loss-3); }
+  .mover-row .day-range{ margin-top:0; }
+
+  .footnote{ margin-top:20px; font-size:11px; color:var(--text-dim); line-height:1.5; }
+  /* Same sentence on every board (and the sibling boards inline), so the app
+     carries it whichever board is open. */
+  .disclaimer{ margin-top:14px; padding-top:10px; border-top:1px solid var(--border);
+               font-size:11px; color:var(--text-dim); line-height:1.5; }
+  .footnote code{ font-family:"IBM Plex Mono",monospace; background:var(--panel-2); padding:1px 5px; border-radius:3px; }
+
+/* ── Page nav ───────────────────────────────────────── */
+.nav{ display:flex; gap:4px; flex-wrap:wrap; }
+.nav a{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:12px; font-weight:600;
+  letter-spacing:0.05em; text-transform:uppercase; text-decoration:none;
+  padding:6px 12px; border-radius:5px; color:var(--text-dim);
+  border:1px solid transparent;
+}
+.nav a:hover{ color:var(--text); }
+.nav a.active{ background:var(--panel); border-color:var(--border); color:var(--text); }
+.nav a:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+/* The first three links are pages of THIS board; the rest are separate
+   projects on the same origin. They are marked apart rather than merged in,
+   because a nav that mixes "switch view" with "leave for another app" makes
+   the back button the only way to tell what just happened. Never .active -
+   these pages cannot be the current one. */
+.nav .nav-sep{ width:1px; align-self:stretch; margin:2px 6px;
+               background:var(--border); opacity:0.8; }
+.nav a.away{ color:var(--text-dim); opacity:0.78; }
+.nav a.away::after{ content:"\2197"; font-size:10px; margin-left:4px;
+                    vertical-align:1px; opacity:0.7; }
+.nav a.away:hover{ color:var(--text); opacity:1; }
+@media (max-width:640px){ .nav .nav-sep{ display:none; } }
+/* Beta marker - the RRG board is still being validated, so it is labelled
+   wherever it is linked (here, the page heading, and the sibling boards'
+   navs) rather than only on its own page. */
+.beta{
+  display:inline-block; margin-left:5px; padding:0 4px; border-radius:3px;
+  font-family:"IBM Plex Mono",monospace; font-size:9px; font-weight:600;
+  letter-spacing:0.06em; line-height:14px; vertical-align:1px;
+  color:var(--accent); border:1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+  text-transform:uppercase;
+}
+.brand h1 .beta{ font-size:10px; vertical-align:4px; }
+
+/* ── Sector summary list (one sector per row) ───────── */
+.sector-strip{ display:flex; flex-direction:column; gap:3px; margin-bottom:22px; }
+.sector-row{
+  display:grid;
+  grid-template-columns:minmax(140px,200px) 62px minmax(150px,1fr) minmax(200px,225px);
+  align-items:center; gap:14px;
+  padding:5px 9px; border-radius:5px; text-decoration:none; color:inherit;
+  background:var(--panel); border:1px solid var(--border);
+  transition:border-color .12s ease;
+}
+.sector-row:hover{ border-color:color-mix(in srgb, var(--info) 55%, var(--border)); }
+.sector-row:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+.sector-row .nm{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:12px;
+  letter-spacing:0.02em; color:var(--text);
+}
+.sector-row .vl{
+  font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:11px;
+  font-variant-numeric:tabular-nums; text-align:center;
+  padding:3px 0; border-radius:3px;
+}
+
+/* inline day-range for the sectoral index */
+.idx-range{ display:flex; align-items:center; gap:8px; min-width:0; }
+.idx-range .lo, .idx-range .hi{
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; color:var(--text-dim);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.idx-range .bar{
+  position:relative; flex:1; height:3px; border-radius:2px; background:var(--border);
+  min-width:60px;
+}
+.idx-range .dot{
+  position:absolute; top:50%; width:8px; height:8px; border-radius:50%;
+  background:var(--info); transform:translate(-50%,-50%);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--info) 25%, transparent);
+}
+.idx-meta{
+  display:flex; align-items:baseline; justify-content:flex-end; gap:7px;
+  font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+  white-space:nowrap; min-width:0; overflow:hidden;
+}
+.idx-meta .lbl{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:9.5px;
+  color:var(--text-dim); letter-spacing:0.03em; text-transform:uppercase;
+  overflow:hidden; text-overflow:ellipsis; min-width:0;
+}
+.idx-meta .px{ font-size:11px; font-weight:600; }
+.idx-meta .pc{ font-size:11px; font-weight:700; }
+.idx-meta .pc.up{ color:var(--b-gain-3); }
+.idx-meta .pc.down{ color:var(--b-loss-3); }
+/* constituent-derived fallback range: muted + dashed, never reads as an index */
+.idx-range.synth .bar{
+  background:transparent;
+  border-top:2px dashed color-mix(in srgb, var(--text-dim) 55%, transparent);
+  height:0;
+}
+.idx-range.synth .dot{
+  background:var(--text-dim); box-shadow:0 0 0 2px color-mix(in srgb, var(--text-dim) 22%, transparent);
+  width:7px; height:7px;
+}
+.idx-range.synth .lo, .idx-range.synth .hi{ opacity:0.75; }
+.idx-none{
+  font-size:10px; color:var(--text-dim); font-style:italic;
+  text-align:right; line-height:1.35;
+}
+.idx-none .sub2{ font-size:9px; opacity:0.75; font-style:normal; }
+@media (max-width:720px){
+  .sector-row{ grid-template-columns:1fr 62px; gap:6px 10px; }
+  .sector-row .idx-range{ grid-column:1 / -1; }
+  .sector-row .idx-meta{ grid-column:1 / -1; justify-content:flex-start; }
+  .idx-none{ grid-column:1 / -1; }
+}
+
+/* ── Sector blocks ──────────────────────────────────── */
+.sector-block{ margin-bottom:18px; scroll-margin-top:12px; }
+.sector-head{
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+  margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid var(--border);
+}
+.sector-head h2{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:14px; font-weight:700;
+  letter-spacing:0.05em; text-transform:uppercase; margin:0; color:var(--text);
+}
+.sector-head .n{ font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--text-dim); }
+.sector-head .avg{
+  font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:12px;
+  padding:2px 8px; border-radius:3px; font-variant-numeric:tabular-nums;
+}
+.sector-head .breadth{
+  margin-left:auto; display:flex; align-items:center; gap:7px;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; color:var(--text-dim);
+  font-variant-numeric:tabular-nums;
+}
+.breadth-bar{
+  width:74px; height:5px; border-radius:3px; overflow:hidden;
+  display:flex; background:var(--b-na);
+}
+.breadth-bar .up{ background:var(--b-gain-3); }
+.breadth-bar .down{ background:var(--b-loss-3); }
+.sector-block .grid{ margin-bottom:0; }
+
+/* ── Sort controls ──────────────────────────────────── */
+.controls{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.controls .lbl{ font-size:11px; color:var(--text-dim); }
+.controls button{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:11px; font-weight:600;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:5px 10px; border-radius:5px; cursor:pointer;
+  border:1px solid var(--border); background:var(--panel); color:var(--text-dim);
+}
+.controls button:hover{ color:var(--text); }
+.controls button.active{ color:var(--text); border-color:var(--info); }
+.controls button:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+
+/* ── Pinned index groups (NIFTY 50 / BANK NIFTY) ────── */
+.sector-row.pinned{
+  border-color:color-mix(in srgb, var(--accent) 45%, var(--border));
+  background:color-mix(in srgb, var(--accent) 7%, var(--panel));
+}
+.sector-row.pinned .nm{ color:var(--accent); letter-spacing:0.05em; }
+.sector-block.pinned .sector-head{
+  border-bottom-color:color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.sector-block.pinned .sector-head h2{ color:var(--accent); }
+
+/* ── Floating back-to-top ───────────────────────────── */
+.to-top{
+  position:fixed; top:14px; right:16px; z-index:50;
+  display:inline-flex; align-items:center; gap:5px;
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:11.5px; font-weight:700;
+  letter-spacing:0.06em; text-transform:uppercase;
+  padding:7px 13px; border-radius:20px; cursor:pointer;
+  /* fully opaque: this floats over saturated red/green tiles */
+  color:var(--text); background:var(--panel);
+  border:1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+  box-shadow:0 2px 10px rgba(0,0,0,0.45);
+  opacity:0; visibility:hidden; transform:translateY(-6px);
+  transition:opacity .16s ease, transform .16s ease, visibility .16s;
+}
+.to-top.visible{ opacity:1; visibility:visible; transform:translateY(0); }
+.to-top:hover{ border-color:var(--accent); color:var(--accent); }
+.to-top:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+.to-top span{ font-size:13px; line-height:1; }
+@media (prefers-reduced-motion:reduce){ .to-top{ transition:none; } }
+
+/* Cash-only names (no F&O contracts): same colour and label as any other tile,
+   with a dashed inset rule. outline (not border) so the tile grid stays aligned. */
+.tile.cash-only{
+  outline:1px dashed color-mix(in srgb, currentColor 42%, transparent);
+  outline-offset:-4px;
+}
+
+/* ── Relative Rotation Graph ─────────────────────────── */
+:root{
+  --q-lead:#2f9d55; --q-weak:#c9a227; --q-lag:#b8362d; --q-imp:#2f5fa8;
+  --q-fill:0.10;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --q-lead:#3ec46f; --q-weak:#d8b53c; --q-lag:#d4564a; --q-imp:#4d84e2;
+    --q-fill:0.13;
+  }
+}
+:root[data-theme="dark"]{
+  --q-lead:#3ec46f; --q-weak:#d8b53c; --q-lag:#d4564a; --q-imp:#4d84e2;
+  --q-fill:0.13;
+}
+
+.rrg-wrap{
+  position:relative; background:var(--panel); border:1px solid var(--border);
+  border-radius:8px; padding:6px; margin-bottom:14px;
+}
+#chart{ display:block; width:100%; height:auto; }
+/* On phones the canvas is scaled to ~36%, which thinned every line to a
+   hairline; keep strokes at their drawn width in screen pixels instead. */
+#chart.phone line, #chart.phone polyline, #chart.phone .dot, #chart.phone .sph{ vector-effect:non-scaling-stroke; }
+.label-note{ margin:-6px 0 12px; font-size:11px; color:var(--text-dim); }
+
+#chart .q-lead{ fill:var(--q-lead); fill-opacity:var(--q-fill); }
+#chart .q-weak{ fill:var(--q-weak); fill-opacity:var(--q-fill); }
+#chart .q-lag { fill:var(--q-lag);  fill-opacity:var(--q-fill); }
+#chart .q-imp { fill:var(--q-imp);  fill-opacity:var(--q-fill); }
+
+#chart .grid{ stroke:var(--border); stroke-width:1; opacity:0.5; }
+#chart .cross{ stroke:var(--text-dim); stroke-width:1.4; opacity:0.75; }
+#chart .tick, #chart .axis, #chart .qlabel, #chart .plabel{
+  font-family:"IBM Plex Mono",monospace; fill:var(--text-dim);
+}
+/* Font sizes are set per screen by layoutChart() in rrg.html (viewBox units
+   chosen so phones stay readable); the fallbacks are the desktop sizes. */
+#chart .tick{ font-size:var(--fs-tick,10px); font-variant-numeric:tabular-nums; }
+#chart .axis{ font-size:var(--fs-axis,11px); letter-spacing:0.04em; }
+#chart .qlabel{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:var(--fs-q,12px); font-weight:700;
+  letter-spacing:0.08em; text-transform:uppercase; opacity:0.75;
+}
+#chart .plabel{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:var(--fs-p,10.5px);
+  font-weight:600; fill:var(--text); paint-order:stroke;
+  stroke:var(--panel); stroke-width:var(--fs-halo,3px); stroke-linejoin:round;
+}
+#chart .trail{ fill:none; stroke-width:1.6; opacity:0.55; }
+#chart .trail.q-lead{ stroke:var(--q-lead); } #chart .trail.q-weak{ stroke:var(--q-weak); }
+#chart .trail.q-lag { stroke:var(--q-lag);  } #chart .trail.q-imp { stroke:var(--q-imp);  }
+#chart .dot-s{ opacity:0.5; }
+#chart .dot-s.q-lead,#chart .dot.q-lead{ fill:var(--q-lead); }
+#chart .dot-s.q-weak,#chart .dot.q-weak{ fill:var(--q-weak); }
+#chart .dot-s.q-lag, #chart .dot.q-lag { fill:var(--q-lag);  }
+#chart .dot-s.q-imp, #chart .dot.q-imp { fill:var(--q-imp);  }
+#chart .dot{ stroke:var(--panel); stroke-width:1.5; cursor:pointer; }
+#chart .dot.cash{ stroke-dasharray:2 2; stroke:var(--text-dim); stroke-width:1.6; }
+#chart .dot:hover{ stroke:var(--text); }
+#chart .dot:focus-visible{ outline:2px solid var(--info); }
+
+.rrg-tip{
+  position:absolute; pointer-events:none; z-index:5; max-width:220px;
+  background:var(--panel-2); border:1px solid var(--border); border-radius:6px;
+  padding:7px 10px; font-size:11.5px; line-height:1.5; color:var(--text);
+  box-shadow:0 4px 16px rgba(0,0,0,0.35);
+}
+.rrg-tip .dim{ color:var(--text-dim); }
+.rrg-tip .q{ font-weight:700; }
+.rrg-tip .q.q-lead{ color:var(--q-lead); } .rrg-tip .q.q-weak{ color:var(--q-weak); }
+.rrg-tip .q.q-lag { color:var(--q-lag);  } .rrg-tip .q.q-imp { color:var(--q-imp);  }
+
+.quad-legend{ display:flex; flex-wrap:wrap; gap:6px 18px; margin-bottom:16px; font-size:11.5px; color:var(--text-dim); }
+.quad-key{ display:inline-flex; align-items:center; gap:6px; }
+.quad-key .sw{ width:12px; height:12px; border-radius:3px; }
+.quad-key .sw.q-lead{ background:var(--q-lead); } .quad-key .sw.q-weak{ background:var(--q-weak); }
+.quad-key .sw.q-lag { background:var(--q-lag);  } .quad-key .sw.q-imp { background:var(--q-imp);  }
+.quad-key em{ font-style:normal; opacity:0.72; }
+
+.controls select{
+  font-family:"IBM Plex Sans Condensed",sans-serif; font-size:11.5px; font-weight:600;
+  padding:5px 8px; border-radius:5px; border:1px solid var(--border);
+  background:var(--panel); color:var(--text); cursor:pointer;
+}
+.controls select:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
+
+/* ── RRG 3D view ─────────────────────────────────────────────────────────
+   Volatility is the depth axis. Size is driven by volatility itself rather
+   than by perspective alone, so the reading survives rotation; the inverse
+   opacity is what keeps the big front spheres from hiding the small ones. */
+/* In 3D the whole canvas is a drag surface, so nothing inside it may swallow
+   the gesture: starting a drag on a label used to select text instead of
+   rotating the globe. */
+#chart.d3{ cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+/* NOTHING decorative takes a pointer, in EITHER plot. Only .sph (3D) and
+   .dot (2D) are targets. These were .d3-scoped, and the 2D board had the
+   same fault in a quieter form: measured by elementFromPoint over every
+   dot centre, a text.plabel sat on Information Technology's own dot and a
+   polyline.trail sat on TCS's, so those two could not be hovered at all.
+   In 3D it was worse - the quadrant faces are painted OVER the bubbles,
+   so a click on a bubble's centre had target polygon.quad-face. */
+/* the * that marks a NAME whose history was repaired - never a value */
+.adj-star{ color:var(--q-weak); font-weight:700; margin-left:2px; }
+#chart text{ pointer-events:none; }
+#chart .globe, #chart .ind-thread, #chart .trail, #chart .stem,
+#chart .dot-s, #chart .quad-face, #chart .globe-body,
+#chart .grid, #chart .cross{ pointer-events:none; }
+#chart.d3:active{ cursor:grabbing; }
+#chart .box{ stroke:var(--border); stroke-width:1; opacity:0.55; fill:none; }
+#chart .cross.zax{ stroke-dasharray:4 3; opacity:0.55; }
+#chart .vtick{ fill:var(--text-dim); }
+#chart .stem{ stroke-width:1; opacity:0.38; }
+#chart .stem.q-lead{ stroke:var(--q-lead); } #chart .stem.q-weak{ stroke:var(--q-weak); }
+#chart .stem.q-lag { stroke:var(--q-lag);  } #chart .stem.q-imp { stroke:var(--q-imp);  }
+#chart .shadow{ fill:var(--text-dim); opacity:0.3; }
+#chart .sph{ stroke:var(--panel); stroke-width:1; cursor:pointer; }
+#chart .sph.cash{ stroke:var(--text-dim); stroke-width:1.4; stroke-dasharray:3 3; }
+#chart .sph:hover{ stroke:var(--text); stroke-width:1.6; }
+#chart .sph:focus-visible{ outline:2px solid var(--info); }
+.quad-key .sz{ border-radius:50%; background:var(--text-dim); }
+.quad-key .sz-lo{ width:8px;  height:8px;  opacity:0.95; }
+.quad-key .sz-hi{ width:17px; height:17px; opacity:0.36; }
+#chart .trail.t3{ stroke-width:1.1; opacity:0.22; }
+#chart .plabel.halo{ paint-order:stroke; stroke:var(--panel); stroke-width:var(--fs-halo,3px); stroke-linejoin:round; }
+#chart .tick.halo, #chart .axis.halo{ paint-order:stroke; stroke:var(--panel); stroke-width:var(--fs-halo,3px); stroke-linejoin:round; }
+
+/* Ex-corporate-action tile: the label has to be unmissable, because the
+   number next to it would otherwise read as a crash. */
+.tile.ex-ca{ outline:1px dashed var(--info); outline-offset:-1px; }
+.ca-tag{
+  margin-top:3px; font-size:9px; font-weight:700; letter-spacing:0.04em;
+  text-transform:uppercase; color:var(--info); opacity:0.95;
+}
+.ca-tag.na{ color:var(--text-dim); }
+.ca-note{ border-left:2px solid var(--info); padding-left:10px; margin-bottom:14px; }
+
+/* Keep a control label with its own buttons when the bar wraps. Without this
+   the row breaks mid-group and a toggle lands alone on the next line, where
+   it reads as unrelated - which is exactly how the 3D toggle got missed. */
+.ctl-group{ display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+.controls{ gap:6px 14px; }
+
+/* RRG globe frame + industry threads */
+#chart .globe{ fill:none; stroke:var(--border); stroke-width:1; opacity:0.7; }
+#chart .globe.faint{ opacity:0.18; }
+#chart .origin{ fill:var(--text-dim); opacity:0.8; }
+#chart .ind-thread{ fill:none; stroke-width:2.4; opacity:0.85; stroke-linejoin:round; stroke-linecap:round; }
+.ind-key{ display:inline-flex; align-items:center; gap:6px; }
+.ind-key .sw{ width:16px; height:3px; border-radius:2px; }
+#chart.d3 .trail.t3{ opacity:0.30; }
+/* the clicked one, not just its group - full weight, and a dot per period
+   so the pace of the rotation reads as well as its direction */
+#chart .trail.t3.pick{ stroke-width:2.4; }
+#chart.d3 .trail.t3.pick{ opacity:0.95; }
+#chart.d3 .trail.t3.pick.far{ opacity:0.30; }
+#chart.d3 .dot-s.t3{ opacity:0.85; }
+#chart.d3 .dot-s.t3.far{ opacity:0.25; }
+
+/* The two great circles that mean something - equator = RS-Momentum 100,
+   prime meridian = RS-Ratio 100 - are drawn harder than the guide lines,
+   because together they are what divides the globe into the four quadrants. */
+#chart .globe.divider{ opacity:0.9; stroke:var(--text-dim); stroke-width:1.3; }
+#chart .qlabel.q-lead{ fill:var(--q-lead); } #chart .qlabel.q-weak{ fill:var(--q-weak); }
+#chart .qlabel.q-lag { fill:var(--q-lag);  } #chart .qlabel.q-imp { fill:var(--q-imp);  }
+#chart .qlabel{ font-size:var(--fs-q,12px); font-weight:700; letter-spacing:0.12em; opacity:1; }
+#chart .qlabel.halo{ paint-order:stroke; stroke:var(--panel); stroke-width:var(--fs-halo-q,3.5px); stroke-linejoin:round; }
+
+/* ── the globe's solid body ──────────────────────────────────────────────
+   A wireframe sphere is transparent, so the far half shows straight through
+   and both halves of every quadrant overlap - which is what made the map hard
+   to read. The body occludes it; the four tinted faces make the occluder
+   carry meaning, so the separation between quadrants is what does the hiding.
+   Far-side content is dimmed rather than dropped, so nothing pops in and out
+   as the globe turns. */
+#chart .globe-body{ fill:var(--bg); fill-opacity:0.82; stroke:none; }
+#chart .quad-face{ stroke:none; fill-opacity:0.16; }
+#chart .quad-face.q-lead{ fill:var(--q-lead); } #chart .quad-face.q-weak{ fill:var(--q-weak); }
+#chart .quad-face.q-lag { fill:var(--q-lag);  } #chart .quad-face.q-imp { fill:var(--q-imp);  }
+#chart .globe.equator{ opacity:1; stroke:var(--text); stroke-width:1.6; }
+#chart .globe.meridian{ opacity:0.85; stroke:var(--text-dim); stroke-width:1.4; }
+#chart .globe.far, #chart .qlabel.far, #chart .ind-thread.far{ opacity:0.16; }
+#chart .sph.far{ opacity:0.3; }
+#chart .trail.far{ opacity:0.05; }
+#chart .glabel{ font-size:var(--fs-g,9.5px); letter-spacing:0.08em; fill:var(--text-dim); }
+#chart .glabel.eq{ fill:var(--text); }
+
+/* Click-to-isolate: the unchosen names stay present but recede, so the globe
+   keeps its shape and you can still see where the industry sits relative to
+   everything else - dropping them entirely would lose that context. */
+#chart .sph.muted{ opacity:0.22; }   /* faded, but still legible as context */
+#chart .plabel.muted{ opacity:0.12; }
+#chart .sph.picked{ stroke:var(--text); stroke-width:2.2; }
+#chart.d3{ cursor:grab; }
+#chart.d3 .sph{ cursor:pointer; }
+
+/* The dome's rim - the edge of the hemisphere the data lives on. Drawn as
+   firmly as the two quadrant dividers, because it is the boundary of the
+   whole figure. */
+#chart .globe.rim{ opacity:0.7; stroke:var(--text-dim); stroke-width:1.3; }
+
+/* ── 2D isolation ──────────────────────────────────────────────────────
+   Matches the 3D view's behaviour: the group you picked stays fully drawn
+   and everything else fades but remains visible, because the gesture is for
+   reading one group AGAINST the rest, not for hiding the rest. The picked
+   name's own trail is thickened so it reads in front of its group. */
+#chart .dot.muted{ opacity:0.20; }
+#chart .dot-s.muted{ opacity:0.14; }
+#chart .trail.muted{ opacity:0.12; }
+#chart .dot.pick{ stroke:var(--text, #e8eaed); stroke-width:1.6px; }
+#chart .trail.pick{ stroke-width:2.1px; opacity:1; }

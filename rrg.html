@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>US Relative Rotation Graph (Beta)</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/app.css?v=20261003c">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>Relative Rotation<span class="beta">Beta</span></h1>
+      <span class="sub">US stocks and ETFs &mdash; relative strength vs momentum, benchmarked to the S&amp;P 500</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">S&amp;P 500</a>
+      <a href="sectors.html">Sectors</a>
+      <a href="rrg.html" class="active">RRG<span class="beta">Beta</span></a>
+      <a href="ema.html">44 EMA</a>
+      <a href="pcr.html">PCR</a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a href="../nifty-heatmap-web/rrg.html" class="away">India</a>
+    </nav>
+  </div>
+
+  <div class="meta-row">
+    <div class="controls">
+      <span class="ctl-group"><span class="lbl">View</span>
+        <button type="button" data-view="sectors" class="active">Sectors</button>
+        <button type="button" data-view="stocks">Stocks</button>
+        <button type="button" data-view="etfGroups">ETF groups</button>
+        <button type="button" data-view="etfs">ETFs</button></span>
+      <span class="ctl-group"><span class="lbl">Period</span>
+        <button type="button" data-period="daily" class="active">Daily</button>
+        <button type="button" data-period="weekly">Weekly</button></span>
+      <span class="ctl-group"><span class="lbl">Tail</span>
+        <button type="button" data-tail="4">4</button>
+        <button type="button" data-tail="8">8</button>
+        <button type="button" data-tail="12" class="active">12</button></span>
+      <span class="ctl-group"><span class="lbl">Plot</span>
+        <button type="button" data-dim="2" class="active">2D</button>
+        <button type="button" data-dim="3">3D &middot; vol</button></span>
+      <span class="lbl" id="focusHint" hidden></span>
+    </div>
+    <div class="status" id="statusTag"><span class="live-dot"></span><span id="statusText">Loading…</span></div>
+  </div>
+
+  <div class="meta-row" id="sectorPickRow" hidden>
+    <div class="controls">
+      <span class="lbl" id="pickLbl">Sector</span>
+      <select id="sectorPick"></select>
+      <span class="lbl" id="pickHint"></span>
+    </div>
+  </div>
+
+  <div class="meta-row" id="rotRow" hidden>
+    <div class="controls">
+      <span class="lbl">Z axis</span>
+      <button type="button" data-z="vol" class="active">Volatility</button>
+      <button type="button" data-z="ret">Absolute return</button>
+      <span class="lbl" style="margin-left:10px;">Drag to rotate</span>
+      <button type="button" id="resetView">Reset view</button>
+      <button type="button" id="faceOn">Face on</button>
+      <button type="button" id="zoomOut" aria-label="Zoom out">&minus;</button>
+      <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+      <span class="lbl">· pinch, or ⌥-scroll, to zoom at the pointer · shift-drag to pan · double-click to clear</span>
+      <span class="lbl" id="volHint"></span>
+    </div>
+  </div>
+
+  <div class="rrg-wrap">
+    <svg id="chart" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet" role="img"
+         aria-label="Relative rotation graph"></svg>
+    <div class="rrg-tip" id="tip" hidden></div>
+  </div>
+
+  <p class="label-note" id="labelNote" hidden></p>
+  <div class="quad-legend" id="quadLegend"></div>
+  <div class="quad-legend" id="sizeLegend" hidden></div>
+  <div class="quad-legend" id="indLegend" hidden></div>
+  <div class="footnote ca-note" id="basketNote" hidden></div>
+
+  <div class="footnote">
+    Each point is one security against the <strong>S&amp;P 500</strong>: horizontal is relative strength,
+    vertical is the momentum of that relative strength, both centred on 100. The trail is the last
+    few periods, so direction matters as much as position — the usual rotation runs clockwise,
+    Leading → Weakening → Lagging → Improving → Leading.
+    <br><br>
+    <strong>This is an approximation, not the licensed JdK formula.</strong> RS-Ratio and
+    RS-Momentum are proprietary to RRG Research; this uses the published approximation — smoothed
+    relative strength, z-scored onto a 100-centred scale. Quadrants and rotation behave correctly,
+    but the numbers will not tie out against a Bloomberg or Optuma RRG.
+    <br><br>
+    <strong>Sector points are the eleven Select Sector SPDRs — real funds, not baskets.</strong>
+    The SPDRs are exactly the eleven GICS sectors, liquid, properly index-weighted and tradeable,
+    so the sector view plots the funds themselves rather than an average of our own making. The
+    Indian board has to build equal-weighted baskets only because no such fund exists there.
+    <strong>ETF groups</strong> are the one place a basket is still needed: no single fund covers
+    &ldquo;fixed income&rdquo; or &ldquo;country &amp; region&rdquo;, so those points are
+    equal-weighted aggregates of their members. <span id="basisNote"></span>
+    <br><br>
+    <strong>ETFs sit on the same scale as stocks, and that is sound rather than convenient.</strong>
+    Each symbol is z-scored over <em>its own</em> history, so a bubble&rsquo;s position never depends
+    on what else is plotted beside it — putting a T-bill fund on the same chart as semiconductors
+    distorts neither. The groups exist because 503 stocks and 112 funds on one canvas is unreadable,
+    and because a group is the unit you actually think in: bonds against equities, defensives
+    against cyclicals.
+    <br><br>
+    <strong>US splits need no repair; spin-offs need a judgement.</strong> Measured across eight
+    known splits — NVDA 10:1, AAPL 4:1, AMZN 20:1, GOOGL 20:1, TSLA 3:1, CMG 50:1, WMT 3:1,
+    MSTR 10:1 — the close-to-close move across every ex-date is an ordinary day, so Yahoo&rsquo;s
+    US series is <em>already</em> adjusted and correctly dated. (Its Indian series is neither,
+    which is why that board carries a whole repair layer this one does without.) A spin-off is
+    the real question, and it is one of degree: Yahoo prices it in as a fractional adjustment
+    whose ratio <em>is</em> the size of the separation. Above <strong>20%</strong> of the parent
+    removed, the earlier bars belong to a materially larger company, so usable history starts at
+    the event and the name reads <strong>NA</strong> until it has enough of its own — clearing
+    itself as the window rolls. Below it, the surviving business still dominates its own path and
+    the back-adjusted series is kept. DuPont (58% to Qnity), Dell (49% to VMware), Exelon,
+    AT&amp;T, Western Digital, Fortive, Flex, GE and BDX fall above the line; 3M, Jacobs, Danaher,
+    Honeywell, Comcast and IBM fall below it.
+    <br><br>
+    <strong>A large move is not evidence of a corporate action, so none is ever inferred from
+    price.</strong> Moderna rose <strong>177% in one session</strong> on 19 August 2026 — by size
+    indistinguishable from a reverse split, and entirely real: the first positive Phase 3 for a
+    personalised mRNA cancer vaccine. Smoothing it would have deleted the largest true signal on
+    the board. Unexplained gaps are reported in the build log and left untouched. The one
+    exception is a separation that has happened but which Yahoo has not yet published — Corteva&rsquo;s
+    seed spin-off as Vylor on 1 October 2026 — and that is entered by hand only against the
+    company&rsquo;s own filing, never against a number.
+    <br><br>
+    Large moves that are <em>not</em> on the reviewed corporate-action list are left strictly
+    alone. F&amp;O stocks have no daily price band, so a 25–30% day is legal and often real —
+    Adani Enterprises in Feb 2023, IndusInd in Mar 2025, IEX in Jul 2025 — and smoothing
+    those away would erase exactly the risk this board exists to show.
+    <br><br>
+    Every symbol is z-scored over an <strong>identical window</strong>. That matters more than it
+    sounds: the same stock on the same day lands in a different spot if normalised over a different
+    amount of history, so anything without enough history is excluded rather than rescaled.
+    <span id="exclNote"></span>
+    <br><br>
+    <span id="ctxNote" hidden></span>
+    <strong>The 3D view puts a third measure on the depth axis.</strong> RRG has no
+    natural third axis — RS-Momentum is already the derivative of RS-Ratio, so the two
+    are a matched pair and anything on Z is a different measure bolted on. Two are offered,
+    each with one reading per tail point so the trail moves in depth too rather than
+    implying the measure held still.
+    <br><br>
+    <strong>Volatility</strong> — trailing realised volatility, annualised. It answers what
+    the flat plot cannot: how much risk sits behind a given relative strength. Its reference
+    plane is the back of the box, since volatility is a magnitude with no natural zero.
+    <br><br>
+    <strong>Absolute return</strong> — the plain return over the stretch the tail covers, and
+    the more pointed of the two. RRG is <em>purely relative</em>: both its axes are measured
+    against the benchmark, so a security can sit deep in Leading while losing money, simply
+    falling more slowly than the index. This axis puts that back on the chart. Its plane sits
+    at <strong>zero</strong>, so the plane is break-even, a sphere in front of it made money,
+    one behind it lost money, and the stem's direction is the sign. Size is the size of the
+    move, depth is its direction.
+    Sphere size is driven by volatility directly, not by perspective alone, so
+    <em>bigger = more volatile</em> still holds after you rotate the chart; larger spheres
+    are drawn more translucent so the volatile names in front don't hide the quiet ones
+    behind them. Depth is still harder to read than a flat position, which is why this is a
+    toggle beside the 2D board and not a replacement for it — the quadrant call should be
+    made on the 2D plot.
+    <br><br>
+    RRG is a relative-strength tool, not a standalone buy/sell signal.
+  </div>
+  <div class="disclaimer">Market data: Yahoo Finance (unofficial; may be delayed or inaccurate). For information only &mdash; not investment advice, and not a recommendation to buy, sell or hold any security. Verify with your broker before acting. <a href="privacy.html" style="color:inherit">Privacy policy</a></div>
+</div>
+
+<script src="assets/app.js?v=20261003c"></script>
+<script>
+const QUADS = [
+  {key:'Leading',   cls:'q-lead',  label:'Leading',   hint:'strong + gaining'},
+  {key:'Weakening', cls:'q-weak',  label:'Weakening', hint:'strong, fading'},
+  {key:'Lagging',   cls:'q-lag',   label:'Lagging',   hint:'weak + falling'},
+  {key:'Improving', cls:'q-imp',   label:'Improving', hint:'weak, turning up'},
+];
+function quadrant(r,m){ return r>=100 ? (m>=100?'Leading':'Weakening') : (m>=100?'Improving':'Lagging'); }
+function quadCls(q){ return (QUADS.find(x=>x.key===q)||QUADS[2]).cls; }
+
+let DATA=null, view='sectors', period='daily', tail=12, sectorPick='__all__';
+
+/* The four views differ in which array they read and what the picker filters,
+   but nothing else, so they are described in one place rather than branched
+   on at every call site. `grouped` views get the picker and draw bare dots
+   until one group is chosen; `flat` views are small enough to label whole. */
+const VIEWS = {
+  sectors:   {src:'sectors',   grouped:false, pickLabel:'Sector',
+              focus:'industry', drillTo:'stocks'},
+  stocks:    {src:'stocks',    grouped:true,  pickLabel:'Sector',
+              focus:'sector',  pickFrom:'sectors'},
+  etfGroups: {src:'etfGroups', grouped:false, pickLabel:'Group',
+              focus:'industry', drillTo:'etfs'},
+  etfs:      {src:'etfs',      grouped:true,  pickLabel:'Group',
+              focus:'sector',  pickFrom:'etfGroups'},
+};
+const V = () => VIEWS[view] || VIEWS.sectors;
+
+/* 3D camera. Volatility is the depth axis, so at yaw=0 a more volatile name
+   sits nearer the viewer; yaw/pitch are nudged off zero by default so the
+   depth is visible at all. */
+let dim='2', zaxis='vol', yaw=-26*Math.PI/180, pitch=15*Math.PI/180;
+const HOME={yaw:-26*Math.PI/180, pitch:15*Math.PI/180};
+
+document.getElementById('quadLegend').innerHTML = QUADS.map(q =>
+  `<span class="quad-key"><span class="sw ${q.cls}"></span>${q.label}<em>${q.hint}</em></span>`).join('');
+
+function activeSeries(){
+  if(!DATA) return [];
+  const all = (DATA[V().src]||{})[period] || [];
+  if(!V().grouped) return all;
+  return sectorPick==='__all__' ? all : all.filter(s=>s.sector===sectorPick);
+}
+
+/* With every stock on screen the chart is unreadable, so "All sectors" draws
+   bare dots; pick one sector and it gains labels and trails. */
+function detailed(series){ return !(V().grouped && sectorPick==='__all__'); }
+
+/* ── Chart geometry for the screen it is on ───────────────────────────
+   The chart is one SVG scaled to fit its box. Drawn only for a wide screen
+   (1000x620), a phone shrank it to ~36%: on a 412dp phone the plot was
+   358x222px, names were ~5px tall and 10 of the 28 sector labels collided.
+   So the canvas is laid out from the box's REAL width:
+     k      viewBox units per CSS pixel
+     fonts  max(desktop size, on-screen floor x k) - readable on a phone,
+            and identical to before on a desktop, where k is ~0.9
+     H      taller on phones (< 640px wide), so the plot is not a letterbox
+   Fonts reach the CSS through custom properties on #chart. */
+let VB={W:1000, H:620, k:1, phone:false, fs:{}};
+function layoutChart(){
+  const svg=document.getElementById('chart');
+  const cssW=Math.max(1,(svg.parentElement.clientWidth||1000)-12);   // .rrg-wrap padding
+  const k=1000/cssW, phone=cssW<640;
+  const H=phone ? Math.max(620, Math.round(1000*Math.min(window.innerHeight*0.62, cssW*1.3)/cssW)) : 620;
+  const f=(desk,px)=>+Math.max(desk, px*k).toFixed(1);
+  const fs={tick:f(10,9), axis:f(11,10), q:f(12,10), p:f(10.5,11), g:f(9.5,9), halo:f(3,2.5), haloQ:f(3.5,2.8)};
+  VB={W:1000, H, k, phone, fs, rk:Math.max(1, k*0.75)};      // rk: marker scale
+  svg.setAttribute('viewBox',`0 0 1000 ${H}`);
+  svg.classList.toggle('phone', phone);
+  for(const [n,v] of Object.entries({tick:fs.tick, axis:fs.axis, q:fs.q, p:fs.p, g:fs.g, halo:fs.halo, 'halo-q':fs.haloQ}))
+    svg.style.setProperty(`--fs-${n}`, v+'px');
+  return VB;
+}
+
+/* Phone-width sector names. The full name still shows in the tap tooltip. */
+const SHORT_NAMES={
+  'Automobile and Auto Components':'Auto', 'Fast Moving Consumer Goods':'FMCG',
+  'Oil Gas & Consumable Fuels':'Oil & Gas', 'Information Technology':'IT',
+  'Construction Materials':'Constr. Materials', 'Consumer Durables':'Cons. Durables',
+  'Consumer Services':'Cons. Services', 'Financial Services':'Fin. Services',
+  'Metals & Mining':'Metals', 'Telecommunication':'Telecom', 'Pharmaceuticals':'Pharma',
+  'New Age Stocks':'New Age', 'Capital Goods':'Cap. Goods',
+};
+const shortName=n=>VB.phone ? (SHORT_NAMES[n]||n) : n;
+
+const _measure=document.createElement('canvas').getContext('2d');
+function textW(t, size, weight=600, fam='"IBM Plex Sans Condensed", sans-serif'){
+  _measure.font=`${weight} ${size}px ${fam}`; return _measure.measureText(t).width;
+}
+
+/* Label placement. Most decisive points go first (furthest from the
+   crosshair: what an RRG is read for, and where there is room); each tries
+   right, left, above, then below its marker and takes the first spot that
+   hits no earlier label, no marker and stays inside the plot (then the four
+   diagonals). A name with no
+   free spot is DROPPED rather than drawn over another - unreadable either
+   way, and its marker still names itself on tap/hover. Returns the SVG and
+   how many were dropped, so the page can say so. */
+function placeLabels(items, box, size, blocked=[]){
+  const hit=(a,b)=>a.x0<b.x1 && a.x1>b.x0 && a.y0<b.y1 && a.y1>b.y0;
+  const marks=items.map(it=>({x0:it.x-it.r, y0:it.y-it.r, x1:it.x+it.r, y1:it.y+it.r, it}));
+  const taken=[...blocked];
+  let out='', hidden=0;
+  [...items].sort((a,b)=>b.prio-a.prio).forEach(it=>{
+    // Reserve the font's full line box (measured: ~0.95em above the baseline,
+    // ~0.33em below), plus a hair of air - reserving only the visible glyphs
+    // let stacked names touch by 1-2px.
+    const w=textW(it.text,size), h=size, g=Math.max(3,size*0.3), R=it.r+g, air=size*0.06;
+    const cell=(x0,base,x1)=>({x0:x0-air, y0:base-h*0.95-air, x1:x1+air, y1:base+h*0.33+air});
+    const side=it.y+h*0.33, above=it.y-R-h*0.33, below=it.y+R+h*0.95;
+    const spots=[
+      {x:it.x+R, y:side,  a:'start',  b:cell(it.x+R,     side,  it.x+R+w)},
+      {x:it.x-R, y:side,  a:'end',    b:cell(it.x-R-w,   side,  it.x-R)},
+      {x:it.x,   y:above, a:'middle', b:cell(it.x-w/2,   above, it.x+w/2)},
+      {x:it.x,   y:below, a:'middle', b:cell(it.x-w/2,   below, it.x+w/2)},
+      // diagonals, for crowded clusters where all four sides are taken
+      {x:it.x+it.r, y:above, a:'start', b:cell(it.x+it.r,   above, it.x+it.r+w)},
+      {x:it.x+it.r, y:below, a:'start', b:cell(it.x+it.r,   below, it.x+it.r+w)},
+      {x:it.x-it.r, y:above, a:'end',   b:cell(it.x-it.r-w, above, it.x-it.r)},
+      {x:it.x-it.r, y:below, a:'end',   b:cell(it.x-it.r-w, below, it.x-it.r)},
+    ];
+    const ok=spots.find(c=>c.b.x0>=box.x0 && c.b.x1<=box.x1 && c.b.y0>=box.y0 && c.b.y1<=box.y1
+      && !taken.some(t=>hit(t,c.b)) && !marks.some(m=>m.it!==it && hit(m,c.b)));
+    if(!ok){ hidden++; return; }
+    taken.push(ok.b);
+    out+=`<text class="${it.cls}" x="${ok.x.toFixed(1)}" y="${ok.y.toFixed(1)}" text-anchor="${ok.a}">${it.html}</text>`;
+  });
+  return {out, hidden};
+}
+
+function noteHidden(hidden, total){
+  const el=document.getElementById('labelNote');
+  el.hidden=!hidden;
+  el.textContent=hidden ? `${hidden} of ${total} names are hidden where they would overlap. Tap or hover a dot to see it.` : '';
+}
+
+function render(){
+  hideTip();
+  layoutChart();
+  document.getElementById('chart').classList.toggle('d3', dim==='3');
+  return dim==='3' ? render3d() : render2d();
+}
+
+function render2d(){
+  const svg=document.getElementById('chart');
+  const series=activeSeries();
+  if(!series.length){ svg.innerHTML=''; noteHidden(0,0); return; }
+
+  const pts=series.map(s=>({...s, tail:s.tail.slice(-tail)}));
+  const show=detailed(pts);
+
+  const xs=[], ys=[];
+  pts.forEach(s=>s.tail.forEach(([r,m])=>{xs.push(r); ys.push(m);}));
+  const {W,H,fs,rk}=VB;
+  // r: room for half of the last x-axis number, centred on the plot edge
+  const PAD={l:Math.max(58, fs.tick*4.6+8), r:Math.max(26, fs.tick*2.1), t:24, b:Math.max(52, fs.tick*1.7+fs.axis*1.7)};
+  const span=(arr)=>{
+    let lo=Math.min(100,...arr), hi=Math.max(100,...arr);
+    const pad=Math.max((hi-lo)*0.14, 0.25);
+    return [lo-pad, hi+pad];
+  };
+  const [x0,x1]=span(xs), [y0,y1]=span(ys);
+  const px=v=>PAD.l+(v-x0)/(x1-x0)*(W-PAD.l-PAD.r);
+  const py=v=>H-PAD.b-(v-y0)/(y1-y0)*(H-PAD.t-PAD.b);
+  const cx=px(100), cy=py(100);
+
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  let out='';
+
+  // quadrant fills
+  out+=`<rect class="q-lead" x="${cx}" y="${PAD.t}" width="${W-PAD.r-cx}" height="${cy-PAD.t}"/>`;
+  out+=`<rect class="q-weak" x="${cx}" y="${cy}" width="${W-PAD.r-cx}" height="${H-PAD.b-cy}"/>`;
+  out+=`<rect class="q-lag"  x="${PAD.l}" y="${cy}" width="${cx-PAD.l}" height="${H-PAD.b-cy}"/>`;
+  out+=`<rect class="q-imp"  x="${PAD.l}" y="${PAD.t}" width="${cx-PAD.l}" height="${cy-PAD.t}"/>`;
+
+  // ticks
+  const ticks=(lo,hi)=>{const step=Math.max(0.25,+(((hi-lo)/5).toFixed(2)));const o=[];
+    for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step) o.push(+v.toFixed(2)); return o;};
+  ticks(x0,x1).forEach(v=>{out+=`<line class="grid" x1="${px(v)}" y1="${PAD.t}" x2="${px(v)}" y2="${H-PAD.b}"/>`+
+    `<text class="tick" x="${px(v)}" y="${H-PAD.b+fs.tick*1.55}" text-anchor="middle">${v.toFixed(2)}</text>`;});
+  ticks(y0,y1).forEach(v=>{out+=`<line class="grid" x1="${PAD.l}" y1="${py(v)}" x2="${W-PAD.r}" y2="${py(v)}"/>`+
+    `<text class="tick" x="${PAD.l-8}" y="${py(v)+fs.tick*0.38}" text-anchor="end">${v.toFixed(2)}</text>`;});
+
+  out+=`<line class="cross" x1="${cx}" y1="${PAD.t}" x2="${cx}" y2="${H-PAD.b}"/>`;
+  out+=`<line class="cross" x1="${PAD.l}" y1="${cy}" x2="${W-PAD.r}" y2="${cy}"/>`;
+
+  const qy0=PAD.t+fs.q*1.3, qy1=H-PAD.b-fs.q*0.65;
+  out+=`<text class="qlabel" x="${W-PAD.r-8}" y="${qy0}" text-anchor="end">Leading</text>`;
+  out+=`<text class="qlabel" x="${PAD.l+8}" y="${qy0}">Improving</text>`;
+  out+=`<text class="qlabel" x="${PAD.l+8}" y="${qy1}">Lagging</text>`;
+  out+=`<text class="qlabel" x="${W-PAD.r-8}" y="${qy1}" text-anchor="end">Weakening</text>`;
+  out+=`<text class="axis" x="${(PAD.l+W-PAD.r)/2}" y="${H-fs.axis*0.6}" text-anchor="middle">RS-Ratio (relative strength)</text>`;
+  out+=`<text class="axis" transform="translate(${fs.axis*1.1},${(PAD.t+H-PAD.b)/2}) rotate(-90)" text-anchor="middle">RS-Momentum</text>`;
+  // the corner quadrant names are obstacles for point labels
+  const qw=t=>textW(t.toUpperCase(), fs.q, 700)+t.length*0.12*fs.q;   // + the CSS letter-spacing
+  const qBlocks=[
+    {x0:W-PAD.r-8-qw('Leading'),   y0:qy0-fs.q, x1:W-PAD.r-8,            y1:qy0+fs.q*0.3},
+    {x0:PAD.l+8,                   y0:qy0-fs.q, x1:PAD.l+8+qw('Improving'), y1:qy0+fs.q*0.3},
+    {x0:PAD.l+8,                   y0:qy1-fs.q, x1:PAD.l+8+qw('Lagging'),   y1:qy1+fs.q*0.3},
+    {x0:W-PAD.r-8-qw('Weakening'), y0:qy1-fs.q, x1:W-PAD.r-8,            y1:qy1+fs.q*0.3},
+  ];
+  const labels=[];
+
+  /* Isolation in 2D, matching the 3D view. Clicking a bubble fades everything
+     outside its group rather than hiding it - the point of the gesture is to
+     read one group AGAINST the rest, so the rest has to stay visible. The
+     picked name's own tail is drawn even when the view is in bare-dot mode,
+     which is the whole reason to click a dot in a 500-name chart. */
+  const inFocus = s => !focusKey || s[focusField()]===focusKey;
+  const mutedCls = s => inFocus(s) ? '' : ' muted';
+
+  pts.forEach((s,i)=>{
+    const t=s.tail, last=t[t.length-1], q=quadrant(last[0],last[1]), cls=quadCls(q);
+    const mine=inFocus(s), mu=mutedCls(s), isPick=(focusName===s.name);
+    // a tail appears when the view is detailed, OR when this point is inside
+    // the isolated group - otherwise clicking a dot would tell you nothing
+    const drawTail = show || (focusKey && mine);
+    if(drawTail && t.length>1){
+      out+=`<polyline class="trail ${cls}${mu}${isPick?' pick':''}" points="${t.map(([r,m])=>`${px(r).toFixed(1)},${py(m).toFixed(1)}`).join(' ')}"/>`;
+      t.slice(0,-1).forEach(([r,m])=>{out+=`<circle class="dot-s ${cls}${mu}" cx="${px(r).toFixed(1)}" cy="${py(m).toFixed(1)}" r="${(2*rk).toFixed(1)}"/>`;});
+    }
+    const X=px(last[0]).toFixed(1), Y=py(last[1]).toFixed(1);
+    const dotR=((show||(focusKey&&mine))?5:3.2)*rk;
+    out+=`<circle class="dot ${cls}${mu}${isPick?' pick':''}" cx="${X}" cy="${Y}" r="${dotR.toFixed(1)}"`+
+         ` data-i="${i}" tabindex="0" aria-label="${esc(s.name)} · RS ${last[0].toFixed(2)} · Mom ${last[1].toFixed(2)} · ${q}"></circle>`;
+    if(show || (focusKey && mine)){ const nm=shortName(s.name)+adjMark(s.name);
+      labels.push({x:+X, y:+Y, r:dotR, text:nm, html:esc(nm), cls:'plabel'+mu, prio:Math.hypot(+X-cx,+Y-cy)}); }
+  });
+  const placed=placeLabels(labels, {x0:PAD.l+2, y0:PAD.t+2, x1:W-PAD.r-2, y1:H-PAD.b-2}, fs.p, qBlocks);
+  out+=placed.out;
+  noteHidden(placed.hidden, labels.length);
+
+  svg.innerHTML=out;
+  /* Clearing is a DOUBLE-click anywhere, as in 3D: a single click on empty
+     space used to clear, so an isolation could not survive an ordinary click. */
+  svg.addEventListener('dblclick', e=>{
+    e.preventDefault();
+    if(focusKey){ focusKey=null; focusName=null; hideTip(); render2d(); syncChrome(); }
+  });
+  svg.querySelectorAll('.dot').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      const s0=pts[+el.dataset.i];
+      if(focusName===s0.name){ focusKey=null; focusName=null; }
+      else { focusKey=s0[focusField()]||null; focusName=s0.name; }
+      hideTip(); render2d(); syncChrome();
+    });
+    /* Double-click a group bubble to open its members - sectors to stocks,
+       ETF groups to ETFs. The group view answers "what is turning"; the next
+       question is always "what inside it", and that was three controls away. */
+    el.addEventListener('dblclick', e=>{
+      e.stopPropagation(); e.preventDefault();
+      if(!V().drillTo) return;
+      drillInto(pts[+el.dataset.i].name);
+    });
+    el.addEventListener('mouseenter',e=>showTip(pts[+el.dataset.i], e));
+    el.addEventListener('mouseleave',hideTip);
+    el.addEventListener('focus',e=>showTip(pts[+el.dataset.i], e));
+    el.addEventListener('blur',hideTip);
+  });
+}
+
+
+/* ────────────────────────── 3D view ──────────────────────────
+   X = RS-Ratio, Y = RS-Momentum, Z = trailing realised volatility.
+
+   RRG has no natural third axis - RS-Momentum is already the derivative of
+   RS-Ratio, so the two are a matched pair and anything on Z is a different
+   measure bolted on. Volatility is that measure here: it answers "how much
+   risk am I taking for this relative strength", which the 2D plot cannot say.
+
+   Sphere radius is driven by volatility DIRECTLY, not by perspective alone, so
+   "bigger = more volatile" still holds after the chart is rotated; perspective
+   only modulates it slightly. Bigger spheres are drawn more translucent so the
+   volatile names in front do not hide the quiet ones behind them - which is the
+   usual objection to 3D scatter plots, and the reason this sits alongside the
+   2D board rather than replacing it. */
+
+/* Industry colours are for the CONNECTING LINES only. Bubbles keep the
+   quadrant palette, because quadrant is what an RRG is read on; the line is
+   the thread that lets one industry be followed through a rotation. */
+const INDUSTRY_COLOURS = {
+  'Financials':              '#4d9de0',
+  'Consumer':                '#e0724d',
+  'Industrials & Energy':    '#9d7ae0',
+  'Healthcare & Technology': '#3fb08a',
+};
+let zoom = 1;               // scroll wheel; clamped in the handler
+/* Camera pan, in screen units. Zoom alone could not reach the corners:
+   the globe was always re-centred in the viewport, so magnifying pushed
+   the quadrant corners off-screen and the only drag gesture rotated the
+   globe away instead of moving the camera. Two things fix that - the
+   wheel now zooms toward the POINTER (put the cursor on what you want
+   and it comes to you), and shift/right-drag moves the camera. */
+let panX = 0, panY = 0;
+let VIEW = null;            // last projection, so the wheel can zoom at a point
+/* Click-to-isolate. At rest the globe shows position only - 24 sectors, or
+   229 stocks, each trailing 12 periods was the clutter.
+
+   WHAT A CLICK ISOLATES DEPENDS ON THE VIEW, because the useful peer group
+   differs. Among STOCKS it is the SECTOR: 3 to 19 names, tight enough to read
+   and the group an individual stock is actually judged against. Among SECTORS
+   the bubble IS a sector, so the only grouping left is the broad INDUSTRY.
+   Whichever it is, the group keeps full colour, its names and its trails, and
+   everything else recedes. Click again, or anywhere off a bubble, to clear. */
+const focusField = () => V().focus;
+let focusKey = null, focusName = null;
+
+const CAM_D = 3.4;          // camera distance in world units
+const Z_HALF = 0.85;        // depth half-extent of the data
+const R_MIN = 5, R_MAX = 21;
+const OP_MIN = 0.34, OP_MAX = 0.93;   // large -> translucent, small -> opaque
+
+function rot(wx, wy, wz){
+  const ca=Math.cos(yaw), sa=Math.sin(yaw);
+  const x1 =  wx*ca + wz*sa;
+  const z1 = -wx*sa + wz*ca;
+  const cb=Math.cos(pitch), sb=Math.sin(pitch);
+  const y2 = wy*cb - z1*sb;
+  const z2 = wy*sb + z1*cb;
+  const s  = CAM_D/(CAM_D - z2);
+  return {x:x1*s, y:-y2*s, z:z2, s};
+}
+
+function render3d(){
+  const svg=document.getElementById('chart');
+  const {W,H,fs,rk}=VB;
+
+  /* The Z toggle now chooses what SIZE carries, not what the radius means.
+     The radius is always conviction (see radOf below), so this is the free
+     channel. */
+  const Z = zaxis==='ret' ? {
+    key:'ret', name:'absolute return', size:'size of the move',
+    fmt:v=>(v>=0?'+':'')+v.toFixed(1)+'%', signed:true,
+  } : {
+    key:'vol', name:'volatility', size:'volatility',
+    fmt:v=>v.toFixed(0)+'%', signed:false,
+  };
+
+  const series=activeSeries()
+    .map(s=>({...s, tail:s.tail.slice(-tail), z:(s[Z.key]||[]).slice(-tail)}))
+    .filter(s=>s.z.length===s.tail.length && s.z.every(v=>v!=null));
+  const novol=activeSeries().length - series.length;
+  document.getElementById('volHint').textContent = series.length
+    ? `${series.length} plotted${novol?` · ${novol} without a full ${Z.name} window`:''}`
+    : `nothing has a full ${Z.name} window on this timeframe`;
+  if(!series.length){ svg.innerHTML=''; noteHidden(0,0); return; }
+
+  const show=detailed(series) || zoom >= 1.5;
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  const asinh=v=>Math.log(v+Math.sqrt(v*v+1));
+  const medOf=a=>{const s=[...a].sort((x,y)=>x-y); return Math.max(1e-6, s[Math.floor(s.length/2)]||1);};
+
+  const xs=[], ys=[], vs=[], ds=[];
+  series.forEach(s=>{
+    s.tail.forEach(([r,m])=>{xs.push(r);ys.push(m);ds.push(Math.hypot(r-100,m-100));});
+    s.z.forEach(v=>vs.push(Z.signed?Math.abs(v):v));
+  });
+
+  /* ── angles: longitude = RS-Ratio, latitude = RS-Momentum ─────────────
+     Equator is RS-Momentum 100, prime meridian is RS-Ratio 100. Together
+     they cut the globe into the four RRG quadrants: east is strong, north is
+     gaining, so Leading is the north-east face and so on round. */
+  /* Longitude stops at 84 degrees, not 150. At 150 the extremes of RS-Ratio
+     wrapped onto the FAR side of the globe, so the most decisive names - the
+     ones most worth seeing - were the ones hidden behind it. Inside 90 every
+     name sits on the near hemisphere, so face on the map reads like a flat
+     RRG with nothing behind anything, and rotating is what adds depth rather
+     than what rescues hidden points. Latitude stays at 72 so nothing lands on
+     a pole, where longitude stops meaning anything. */
+  const LON = 84*Math.PI/180, LAT = 72*Math.PI/180, R_FLOOR = 0.14;
+  const sx_=medOf(xs.map(v=>Math.abs(v-100))), sy_=medOf(ys.map(v=>Math.abs(v-100)));
+  const mx_=Math.max(1e-6,...xs.map(v=>Math.abs(v-100))), my_=Math.max(1e-6,...ys.map(v=>Math.abs(v-100)));
+  const lonOf = rs => clamp(Math.sign(rs-100)*asinh(Math.abs(rs-100)/sx_)/asinh(mx_/sx_),-1,1)*LON;
+  const latOf = mm => clamp(Math.sign(mm-100)*asinh(Math.abs(mm-100)/sy_)/asinh(my_/sy_),-1,1)*LAT;
+
+  /* ── radius: CONVICTION, not a bolted-on metric ───────────────────────
+     Distance from the 100/100 crosshair. The centre is where a name has no
+     meaningful relative strength either way and its quadrant label barely
+     means anything, because a tiny move flips it; the shell is where it sits
+     decisively in its quadrant.
+
+     Measured on the live tails, this is what earns the geometry: a stock in
+     the inner band changes quadrant on 32.7% of steps against 12.8% out at
+     the shell, 2.6x more often. So a bubble falling inward is a trend losing
+     conviction BEFORE the quadrant label changes, and rotation genuinely
+     happens through the middle. asinh-scaled like the angles - ordered by
+     distance, not proportional to it. */
+  const sd_=medOf(ds), md_=Math.max(1e-6,...ds);
+  const radOf = (rs,mm) => {
+    const t = asinh(Math.hypot(rs-100,mm-100)/sd_)/asinh(md_/sd_);
+    return R_FLOOR + (1-R_FLOOR)*clamp(t,0,1);
+  };
+
+  const world=(lon,lat,r)=>[ r*Math.cos(lat)*Math.sin(lon), r*Math.sin(lat), r*Math.cos(lat)*Math.cos(lon) ];
+  const wOf=(rs,mm)=>world(lonOf(rs), latOf(mm), radOf(rs,mm));
+
+  // size carries the Z metric
+  const sz0=Math.min(...vs), sz1=Math.max(...vs);
+  const szN=v=>(sz1-sz0<1e-9)?0.5:clamp(((Z.signed?Math.abs(v):v)-sz0)/(sz1-sz0),0,1);
+
+  /* Fit to the DOME, not to a whole sphere. Fitting the sphere reserved room
+     for a half that is never drawn, so the dome sat smaller than it needed to
+     once rotated. */
+  const probe=[];
+  for(let la=-90; la<=90; la+=15)
+    for(let lo=-90; lo<=90; lo+=15)
+      probe.push(rot(...world(lo*Math.PI/180, la*Math.PI/180, 1)));
+  const bx0=Math.min(...probe.map(p=>p.x)), bx1=Math.max(...probe.map(p=>p.x));
+  const by0=Math.min(...probe.map(p=>p.y)), by1=Math.max(...probe.map(p=>p.y));
+  const M=64;
+  const k=Math.min((W-2*M)/Math.max(bx1-bx0,1e-6), (H-2*M)/Math.max(by1-by0,1e-6))*zoom;
+  const bcx=(bx0+bx1)/2, bcy=(by0+by1)/2;
+  const ox=W/2-k*bcx+panX, oy=H/2-k*bcy+panY;
+  VIEW={k,ox,oy,bcx,bcy,W,H};
+  const P=(wx,wy,wz)=>{ const p=rot(wx,wy,wz); return {x:ox+k*p.x, y:oy+k*p.y, z:p.z, s:p.s}; };
+  const pt=(rs,mm)=>P(...wOf(rs,mm));
+
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const xy=p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+
+  /* ── front / back ─────────────────────────────────────────────────────
+     A wireframe globe is transparent, so the far side shows straight through
+     and the two halves of every quadrant overlap - which makes the map
+     unreadable. Everything is therefore split by depth and drawn in three
+     passes: the far half, then a translucent globe body that occludes it,
+     then the near half. The far half stays faintly visible for context
+     instead of vanishing, so a rotation never makes points pop in and out. */
+  let back='', body='', front='';
+  const put=(depth, svgStr)=>{ if(depth<0) back+=svgStr; else front+=svgStr; };
+
+  const arcSplit=(fn, cls, a0=0, a1=360)=>{
+    let run=[], runDepth=null;
+    const flush=()=>{ if(run.length>1) put(runDepth, `<polyline class="${cls}${runDepth<0?' far':''}" points="${run.join(' ')}"/>`); run=[]; };
+    for(let a=a0;a<=a1;a+=3){
+      const t=a*Math.PI/180, w=fn(t), p=P(...w), dep=p.z<0?-1:1;
+      if(runDepth===null) runDepth=dep;
+      if(dep!==runDepth){ run.push(xy(p)); flush(); runDepth=dep; }
+      run.push(xy(p));
+    }
+    flush();
+  };
+
+  front+='<defs>'+QUADS.map(q=>
+    `<radialGradient id="sph-${q.cls}" cx="34%" cy="28%" r="72%">`+
+    `<stop offset="0%" stop-color="#ffffff" stop-opacity="0.72"/>`+
+    `<stop offset="42%" stop-color="var(--${q.cls})"/>`+
+    `<stop offset="100%" stop-color="var(--${q.cls})" stop-opacity="0.82"/>`+
+    `</radialGradient>`).join('')+'</defs>';
+
+  /* A DOME, not a sphere. Longitude is capped inside +/-90 so that every
+     name keeps positive depth and nothing can hide behind the globe - which
+     leaves the far hemisphere permanently empty. Drawing it anyway was just a
+     dark half that invited the question "what is over there?", so the frame
+     now stops at the rim and the shape matches the data it holds. */
+  arcSplit(t=>world(t,0,1), 'globe equator',  -90, 90);   // equator  = Mom 100
+  arcSplit(t=>world(0,t,1), 'globe meridian', -90, 90);   // meridian = RS 100
+  arcSplit(t=>[Math.cos(t), Math.sin(t), 0], 'globe rim');  // the dome's edge
+  [-0.9,-0.45,0.45,0.9].forEach(f=>{
+    arcSplit(t=>world(t, f*LAT, 1), 'globe faint', -90, 90);
+    arcSplit(t=>world(f*LON, t, 1), 'globe faint', -90, 90);
+  });
+
+  /* ── the globe body: four tinted quadrant faces ───────────────────────
+     This is what stops the far side showing through, and it does double duty.
+     A plain occluder would declutter but say nothing; shading each quadrant's
+     own face means the separation between quadrants IS the thing doing the
+     hiding. Face on, the near faces cover the far half and the map reads like
+     a flat RRG; rotate, and the faces turn away to reveal what was behind.
+
+     A base disc sits underneath because the four faces only span the
+     +/-150 x +/-72 degree box, leaving the polar caps and the far gap
+     uncovered. */
+  const Oc=P(0,0,0);
+  /* The dome's silhouette is no longer a circle - rotate it and the rim
+     becomes an ellipse with the cap bulging past it. A hemisphere is convex,
+     so its outline is exactly the convex hull of its projected surface: dense
+     samples, then a monotone-chain hull. Cheap, and correct at every angle. */
+  const surf=[];
+  for(let la=-90; la<=90; la+=10)
+    for(let lo=-90; lo<=90; lo+=10){
+      const q0=P(...world(lo*Math.PI/180, la*Math.PI/180, 1));
+      surf.push([q0.x,q0.y]);
+    }
+  const hull=(pts)=>{
+    pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+    const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+    const half=(arr)=>{const h=[];for(const q of arr){while(h.length>1&&cr(h[h.length-2],h[h.length-1],q)<=0)h.pop();h.push(q);}return h;};
+    const lo=half(pts), hi=half(pts.slice().reverse());
+    return lo.slice(0,-1).concat(hi.slice(0,-1));
+  };
+  body=`<polygon class="globe-body" points="${hull(surf).map(q=>`${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' ')}"/>`;
+
+  const walk=(from,to,fn,out2)=>{const N=18;for(let i=0;i<=N;i++){out2.push(xy(P(...fn(from+(to-from)*i/N))));}};
+  const quadFace=(ls,lt,cls)=>{
+    const pts=[];
+    walk(0, ls*LON, u=>world(u, 0, 1), pts);                 // along the equator
+    walk(0, lt*LAT, u=>world(ls*LON, u, 1), pts);            // up the far meridian
+    walk(ls*LON, 0, u=>world(u, lt*LAT, 1), pts);            // back along the parallel
+    walk(lt*LAT, 0, u=>world(0, u, 1), pts);                 // down the prime meridian
+    return `<polygon class="quad-face ${cls}" points="${pts.join(' ')}"/>`;
+  };
+  body += quadFace( 1,  1, 'q-lead') + quadFace( 1, -1, 'q-weak')
+        + quadFace(-1, -1, 'q-lag')  + quadFace(-1,  1, 'q-imp');
+
+  // equator and meridian, named on the front where they can be read
+  // Guide names are collected, not drawn yet: they go down after the quadrant
+  // names, and one that would land on a quadrant name is skipped (the
+  // quadrant matters more; the guide line itself still shows).
+  const marks=[];
+  const mark=(w,txt,cls)=>{const p=P(...w); if(p.z<0) return;
+    const hw=(textW(txt, fs.g, 400, '"IBM Plex Sans", sans-serif')+txt.length*0.08*fs.g)/2+2;
+    const y=p.y-fs.g*0.6;
+    marks.push({x:p.x, y, txt, cls, b:{x0:p.x-hw, y0:y-fs.g*1.0, x1:p.x+hw, y1:y+fs.g*0.35}});};
+  mark(world(LON*0.55,0,1.0), 'EQUATOR · momentum 100', 'eq');
+  mark(world(0,LAT*0.62,1.0), 'prime meridian · RS-Ratio 100', 'mer');
+
+  // face names sit just off the dome; on a narrow canvas that can be past the
+  // frame edge, so they are held inside it
+  const face=(lon,lat,txt,cls)=>{const p=P(...world(lon,lat,1.18));
+    const hw=(textW(txt, fs.q, 700)+txt.length*0.12*fs.q)/2+4;
+    const x=Math.min(W-hw, Math.max(hw, p.x)), y=Math.min(H-fs.axis*2, Math.max(fs.q*1.2, p.y));
+    if(p.z>=0) faceBlocks.push({x0:x-hw, y0:y-fs.q, x1:x+hw, y1:y+fs.q*0.35});
+    put(p.z, `<text class="qlabel halo ${cls}${p.z<0?' far':''}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle">${txt}</text>`);};
+  const faceBlocks=[];
+  face( LON*0.5,  LAT*0.5, 'LEADING',   'q-lead');
+  face( LON*0.5, -LAT*0.5, 'WEAKENING', 'q-weak');
+  face(-LON*0.5, -LAT*0.5, 'LAGGING',   'q-lag');
+  face(-LON*0.5,  LAT*0.5, 'IMPROVING', 'q-imp');
+  const overlaps=(a,b)=>a.x0<b.x1 && a.x1>b.x0 && a.y0<b.y1 && a.y1>b.y0;
+  marks.forEach(m=>{
+    if(faceBlocks.some(f=>overlaps(f,m.b))) return;
+    front+=`<text class="glabel halo ${m.cls}" x="${m.x.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle">${m.txt}</text>`;
+    faceBlocks.push(m.b);                      // point labels steer clear of it too
+  });
+
+  front+=`<circle class="origin" cx="${Oc.x.toFixed(1)}" cy="${Oc.y.toFixed(1)}" r="${(3*rk).toFixed(1)}"/>`;
+  front+=`<text class="tick halo" x="${Oc.x.toFixed(1)}" y="${(Oc.y+fs.tick*1.6).toFixed(1)}" text-anchor="middle">no conviction</text>`;
+  /* The full caption is ~95 characters - wider than a phone at a readable
+     size - so phones get the short form; the legend below spells it out. */
+  const caption=[
+    `longitude = RS-Ratio · latitude = RS-Momentum · out from centre = conviction · size = ${Z.size}`,
+    `lon = RS-Ratio · lat = momentum · radius = conviction`,
+    `radius = conviction`,
+  ].find(c=>textW(c, fs.axis, 400, '"IBM Plex Mono", monospace')*1.04 <= W-16);
+  if(caption) front+=`<text class="axis" x="${W/2}" y="${H-fs.axis*0.7}" text-anchor="middle">${caption}</text>`;
+  const labels3=[];
+
+  /* The industry thread is drawn ONLY for the industry in focus. Shown for
+     all four at once it was four more polylines through a space already full
+     of trails; shown for one, it is the thing that lets that industry be
+     followed through a rotation. */
+  /* STOCKS VIEW ONLY. In the sector map a thread joins at most a handful of
+     big points and reads as clutter, so there are no connecting lines there
+     at all - clicking still isolates the industry, it just does it by
+     dimming. Among stocks the line is what makes an industry followable. */
+  if(focusKey && V().grouped){
+    const mem=series.filter(sx=>sx[focusField()]===focusKey);
+    if(mem.length>1){
+      const col=INDUSTRY_COLOURS[mem[0].industry]||'var(--text-dim)';
+      const seq=mem.map(sx=>({last:sx.tail[sx.tail.length-1]})).sort((a,b)=>a.last[0]-b.last[0]);
+      for(let i=1;i<seq.length;i++){
+        const A=pt(seq[i-1].last[0],seq[i-1].last[1]), B=pt(seq[i].last[0],seq[i].last[1]);
+        const dep=(A.z+B.z)/2;
+        put(dep, `<line class="ind-thread${dep<0?' far':''}" x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}" stroke="${col}"/>`);
+      }
+    }
+  }
+
+  series.map((s,i)=>{
+    const last=s.tail[s.tail.length-1];
+    return {s, i, last, lv:s.z[s.z.length-1], p:pt(last[0],last[1])};
+  }).sort((a,b)=>a.p.z-b.p.z).forEach(({s,i,last,lv,p})=>{
+    const q=quadrant(last[0],last[1]), cls=quadCls(q), far=p.z<0;
+    const onStage = !focusKey || s[focusField()]===focusKey;
+    const isPick  = focusName && s.name===focusName;
+    const t=Math.sqrt(szN(lv));
+    const r=(R_MIN+(R_MAX-R_MIN)*t)*(0.78+0.22*p.s)*(show?1:0.62)*Math.sqrt(zoom)*rk;
+    const op=OP_MAX-(OP_MAX-OP_MIN)*t;
+    let g='';
+    /* Trails are the clutter, so they appear only for the group in focus -
+       and inside that group the one you actually CLICKED is the loud one.
+       A group trail at a uniform weight answers "where has this lot been"
+       but not "which of these did I pick", which is the question a click
+       asks. The pick gets full weight plus a dot per period, so its
+       direction and its pace are both readable; the peers stay faint
+       enough to be context. */
+    if(onStage && focusKey && s.tail.length>1){
+      const pts=s.tail.map(([rr,mm])=>pt(rr,mm));
+      const path=pts.map(xy).join(' ');
+      g+=`<polyline class="trail t3 ${cls}${isPick?' pick':''}${far?' far':''}" points="${path}"/>`;
+      if(isPick) pts.slice(0,-1).forEach(q0=>{
+        g+=`<circle class="dot-s t3 ${cls}${far?' far':''}" cx="${q0.x.toFixed(1)}" cy="${q0.y.toFixed(1)}" r="2.1"/>`;
+      });
+    }
+    g+=`<circle class="sph ${cls}${s.cashOnly?' cash':''}${far?' far':''}${onStage?'':' muted'}${isPick?' picked':''}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}"`+
+       ` r="${r.toFixed(1)}" fill="url(#sph-${cls})" fill-opacity="${op.toFixed(2)}"`+
+       ` data-i="${i}" tabindex="0"`+
+       ` aria-label="${esc(s.name)} · RS ${last[0].toFixed(2)} · Mom ${last[1].toFixed(2)} · ${q}`+
+       ` · conviction ${Math.hypot(last[0]-100,last[1]-100).toFixed(2)} · ${Z.name} ${Z.fmt(lv)}`+
+       `${s.industry?' · '+esc(s.industry):''}"></circle>`;
+    // in focus mode only the chosen industry keeps its names
+    if(!far && (focusKey ? onStage : show)){
+      const nm=shortName(s.name)+adjMark(s.name);
+      labels3.push({x:p.x, y:p.y, r, text:nm, html:esc(nm), cls:`plabel halo${onStage?'':' muted'}`,
+                    prio:(isPick?1e9:0)+(onStage?1e6:0)+Math.hypot(p.x-Oc.x,p.y-Oc.y)});
+    }
+    put(p.z, g);
+  });
+  // labels go on top, placed so none lands on another (a picked name always wins)
+  const placed3=placeLabels(labels3, {x0:4, y0:4, x1:W-4, y1:H-fs.axis*1.6}, fs.p, faceBlocks);
+  front+=placed3.out;
+  noteHidden(placed3.hidden, labels3.length);
+
+  svg.innerHTML = back + body + front;
+  /* Clearing is a DOUBLE-click, anywhere. A single click on empty space used
+     to clear, which meant an isolation could not survive an ordinary click or
+     the end of a drag - so the group you had just picked kept vanishing. */
+  svg.addEventListener('dblclick', e=>{
+    e.preventDefault();
+    if(focusKey){ focusKey=null; focusName=null; hideTip(); render3d(); }
+  });
+  svg.querySelectorAll('.sph').forEach(el=>{
+    el.addEventListener('click', e=>{
+      e.stopPropagation();
+      if(window.__rrgDragged && window.__rrgDragged()) return;   // that was a rotate
+      const s0=series[+el.dataset.i];
+      if(focusName===s0.name){ focusKey=null; focusName=null; }
+      else { focusKey=s0[focusField()]||null; focusName=s0.name; }
+      hideTip(); render3d();
+      if(window.__rrgFrame) window.__rrgFrame();   // only if the tail is unreadably small
+    });
+    /* Double-click a SECTOR bubble to open its constituents. The sector view
+       answers "which sectors are turning"; the obvious next question is
+       "which names inside this one", and that was three controls away. */
+    el.addEventListener('dblclick', e=>{
+      e.stopPropagation(); e.preventDefault();
+      if(!V().drillTo) return;
+      drillInto(series[+el.dataset.i].name);
+    });
+    el.addEventListener('mouseenter',e=>showTip(series[+el.dataset.i], e));
+    el.addEventListener('mouseleave',hideTip);
+    el.addEventListener('focus',e=>showTip(series[+el.dataset.i], e));
+    el.addEventListener('blur',hideTip);
+  });
+
+  document.getElementById('indLegend').hidden = true;
+
+  document.getElementById('sizeLegend').innerHTML =
+    (focusKey
+      ? `<span class="quad-key"><strong>${focusKey}</strong>&nbsp;isolated (${series.filter(sx=>sx[focusField()]===focusKey).length} of ${series.length}) — double-click anywhere to clear</span>`
+      : `<span class="quad-key">click a bubble to isolate its ${V().grouped?(V().pickLabel.toLowerCase()+', and link it'):'group'}</span>`)+
+    `<span class="quad-key"><strong>centre</strong>&nbsp;= on the crosshair, quadrant barely means anything</span>`+
+    `<span class="quad-key"><strong>shell</strong>&nbsp;= decisively in its quadrant</span>`+
+    `<span class="quad-key"><span class="sz sz-lo"></span>low ${Z.size} — small, opaque</span>`+
+    `<span class="quad-key"><span class="sz sz-hi"></span>high ${Z.size} — large, translucent</span>`;
+}
+
+/* ── rotation by drag / arrow keys ── */
+(function(){
+  const svg=document.getElementById('chart');
+  let drag=null;
+  /* Pointer position in viewBox units. The svg uses preserveAspectRatio
+     xMidYMid meet, so the drawing is letterboxed inside the element and a
+     raw client offset is not a viewBox coordinate. */
+  const scaleOf=()=>{ const r=svg.getBoundingClientRect();
+    const sc=Math.min(r.width/VB.W, r.height/VB.H);
+    return (sc>0 && isFinite(sc)) ? {r,sc} : null; };   // 0 while laid out/hidden
+  const toView=(cx,cy)=>{
+    const g=scaleOf(); if(!g) return null;
+    const {r,sc}=g;
+    return { x:(cx-r.left-(r.width-VB.W*sc)/2)/sc, y:(cy-r.top-(r.height-VB.H*sc)/2)/sc };
+  };
+  const clampPan=()=>{ panX=Math.max(-900,Math.min(900,panX));
+                       panY=Math.max(-560,Math.min(560,panY)); };
+  /* A rotate re-renders, which replaces svg.innerHTML - and a click only
+     fires when pointerdown and pointerup land on the SAME element. So a
+     single pixel of hand jitter between press and release destroyed the
+     circle mid-click and the click event never happened: bubbles looked
+     unclickable with a real mouse, while synthetic events (which never
+     move) worked fine. Nothing moves until the pointer has travelled
+     past SLOP, and a gesture that did move suppresses the click it would
+     otherwise end with. */
+  const SLOP=4;
+  let suppressClick=false;
+  const start=(x,y,mode)=>{ drag={x,y,yaw,pitch,panX,panY,mode,moved:false}; suppressClick=false; hideTip(); };
+  const move=(x,y)=>{
+    if(!drag) return;
+    if(!drag.moved){
+      if(Math.hypot(x-drag.x, y-drag.y) < SLOP) return;
+      drag.moved=true; suppressClick=true;
+    }
+    if(drag.mode==='pan'){
+      const g=scaleOf(); if(!g) return;
+      panX=drag.panX+(x-drag.x)/g.sc; panY=drag.panY+(y-drag.y)/g.sc;
+      clampPan(); render3d(); return;
+    }
+    /* Both axes follow the mouse, as if the globe's front face were being
+       dragged. Pitch used to be negated, so horizontal tracked the pointer
+       while vertical fought it - verified against the projection: raising
+       pitch moves the TOP point DOWN the screen, so dragging down must RAISE
+       pitch, not lower it. */
+    yaw = drag.yaw + (x-drag.x)*0.006;
+    pitch = Math.max(-1.35, Math.min(1.35, drag.pitch + (y-drag.y)*0.006));
+    render3d();
+  };
+  const end=()=>{ drag=null; };
+  window.__rrgDragged = () => suppressClick;
+  /* The drag is tracked on WINDOW, not by capturing the pointer on the svg.
+     setPointerCapture retargets every later event - including the click -
+     to the capture element, so pointerdown landed on a bubble but the click
+     arrived at <svg>, and the per-bubble handler never ran. That is why
+     clicking a bubble did nothing with a real mouse: measured, pointerdown
+     target polygon.quad-face / click target svg.d3. Window listeners keep
+     a drag alive outside the svg without touching click targeting. */
+  const onMove=e=>move(e.clientX,e.clientY);
+  const onUp=()=>{ end();
+    window.removeEventListener('pointermove',onMove);
+    window.removeEventListener('pointerup',onUp);
+    window.removeEventListener('pointercancel',onUp); };
+  svg.addEventListener('pointerdown',e=>{ if(dim!=='3') return;
+    const pan = e.shiftKey || e.button===1 || e.button===2;
+    if(pan) e.preventDefault();
+    start(e.clientX,e.clientY, pan?'pan':'rotate');
+    window.addEventListener('pointermove',onMove);
+    window.addEventListener('pointerup',onUp);
+    window.addEventListener('pointercancel',onUp); });
+  svg.addEventListener('contextmenu',e=>{ if(dim==='3') e.preventDefault(); });
+  /* ZOOMING, AND WHY IT TAKES FOUR PATHS.
+     A plain wheel must scroll the PAGE - taking the wheel outright left the
+     page frozen whenever the cursor sat over the globe, which after clicking
+     a bubble is exactly where it is. So zoom needs its own gesture, and no
+     single gesture survives every browser:
+
+       - Chrome/Firefox report a trackpad pinch as ctrl+wheel.
+       - SAFARI DOES NOT. It has its own gesturestart/gesturechange events
+         and never synthesises ctrl+wheel, so the ctrl+wheel path alone is
+         dead on Safari - which is what "pinch to zoom does nothing" was.
+       - CMD+scroll is Safari's own page zoom, so asking for it hands the
+         gesture to the browser instead. Dropped; Option/Alt is not claimed
+         by any of them and works with an ordinary mouse wheel.
+       - And the buttons below need no gesture at all, so there is always
+         one path that no OS or browser setting can intercept.
+
+     All four funnel into zoomAt(), so the zoom-toward-the-pointer maths
+     lives in one place. */
+  function zoomAt(factor, clientX, clientY){
+    const next = Math.min(6, Math.max(0.5, zoom * factor));
+    if(next === zoom) return;
+    /* Hold the world point under the pointer still. Without this the
+       corners are unreachable: every zoom step re-centres the globe and
+       walks them further off-screen. */
+    const c = (VIEW && clientX!=null) ? toView(clientX, clientY) : null;
+    if(c){
+      const u=(c.x-VIEW.ox)/VIEW.k, v=(c.y-VIEW.oy)/VIEW.k;
+      const k2=VIEW.k*(next/zoom);
+      const nx = c.x - k2*u - (VIEW.W/2 - k2*VIEW.bcx);
+      const ny = c.y - k2*v - (VIEW.H/2 - k2*VIEW.bcy);
+      if(isFinite(nx) && isFinite(ny)){ panX=nx; panY=ny; }   // never NaN the view
+    }
+    zoom = next;
+    if(zoom<=1){ panX=0; panY=0; }   // zooming back out re-centres
+    clampPan();
+    hideTip(); render3d();
+  }
+  window.__rrgZoom = () => zoom;     // for verification
+
+  svg.addEventListener('wheel',e=>{
+    if(dim!=='3') return;
+    if(!(e.ctrlKey || e.altKey)) return;   // plain wheel: let the page scroll
+    e.preventDefault();
+    zoomAt(e.deltaY < 0 ? 1.12 : 1/1.12, e.clientX, e.clientY);
+  }, {passive:false});
+
+  /* Safari's pinch. e.scale is cumulative from the gesture start, so it is
+     differenced against the last sample to get a per-event factor. */
+  let gScale=1;
+  svg.addEventListener('gesturestart', e=>{ if(dim!=='3') return;
+    e.preventDefault(); gScale=1; });
+  svg.addEventListener('gesturechange', e=>{ if(dim!=='3') return;
+    e.preventDefault();
+    const f = e.scale / (gScale || 1); gScale = e.scale;
+    if(isFinite(f) && f>0) zoomAt(f, e.clientX, e.clientY);
+  });
+  svg.addEventListener('gestureend', e=>{ if(dim==='3') e.preventDefault(); });
+
+  // the gesture-free path: zoom about the centre of the view
+  const btnZoom=f=>()=>{ const r=svg.getBoundingClientRect();
+    zoomAt(f, r.left+r.width/2, r.top+r.height/2); };
+  document.getElementById('zoomIn').addEventListener('click', btnZoom(1.35));
+  document.getElementById('zoomOut').addEventListener('click', btnZoom(1/1.35));
+  document.getElementById('resetView').addEventListener('click',()=>{
+    yaw=HOME.yaw; pitch=HOME.pitch; zoom=1; panX=0; panY=0; render3d(); });
+  document.getElementById('faceOn').addEventListener('click',()=>{
+    yaw=0; pitch=0; render3d(); });
+
+  /* A picked stock's tail was rendering all along - at about 36x85px, which
+     is a scribble, not a tail. Sector funds are smooth, so their arcs
+     are long; stocks put 229 names on the same globe, so one name's twelve
+     periods occupy a few dozen pixels and read as nothing at all.
+
+     So: after a pick, if its tail is too small to follow, frame it. Only
+     then - a sector's tail is already legible and is left exactly where it
+     was. Reset view, or clearing the pick, undoes it. */
+  /* Legibility is the MEDIAN STEP between consecutive periods, not the
+     bounding box. A tail that doubles back on itself can span a wide box
+     while every hop is a few pixels - which is exactly the stocks case.
+     Measured on the same day: SUNPHARMA 11.8px median step in a 92px box,
+     Consumer Services 33.7px in a 210px box. The box barely separates
+     them; the step separates them cleanly. */
+  const READABLE=20, WANT=28, MAX_STEP=4;
+  function frameOnPick(){
+    const p=document.querySelector('#chart polyline.trail.t3.pick');
+    if(!p || !VIEW) return;
+    let bb, pts;
+    try{
+      bb=p.getBBox();
+      pts=p.getAttribute('points').trim().split(/\s+/).map(t=>t.split(',').map(Number));
+    }catch(e){ return; }
+    if(pts.length<2) return;
+    const d=[];
+    for(let i=1;i<pts.length;i++) d.push(Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
+    d.sort((a,b)=>a-b);
+    const med=d[Math.floor(d.length/2)];
+    if(!isFinite(med) || med<=0 || med>=READABLE) return;
+    const next=Math.min(6, zoom*Math.min(MAX_STEP, WANT/med));
+    if(next <= zoom*1.05) return;
+    const k2=VIEW.k*(next/zoom);
+    const u=(bb.x+bb.width/2-VIEW.ox)/VIEW.k, v=(bb.y+bb.height/2-VIEW.oy)/VIEW.k;
+    const nx=VIEW.W/2 - k2*u - (VIEW.W/2 - k2*VIEW.bcx);
+    const ny=VIEW.H/2 - k2*v - (VIEW.H/2 - k2*VIEW.bcy);
+    if(!isFinite(nx) || !isFinite(ny)) return;
+    panX=nx; panY=ny; zoom=next; clampPan(); render3d();
+  }
+  window.__rrgFrame = frameOnPick;
+})();
+
+/* A name whose SERIES this build repaired carries a *, the same mark the
+   44 EMA board uses. It goes on the NAME only - never on RS-Ratio, momentum
+   or any other reading, because what changed is the history every one of
+   those is computed from, not any single figure. */
+function adjStar(name){
+  const r = DATA && DATA.repaired && DATA.repaired[name];
+  if(!r) return '';
+  return `<span class="adj-star" title="${r.what} (${r.date}) — `
+       + (r.kind === 'economic'
+            ? 'history starts at the event; earlier bars belong to a larger company'
+            : 'earlier prices back-adjusted onto the post-event basis')
+       + `">*</span>`;
+}
+function adjMark(name){ return (DATA && DATA.repaired && DATA.repaired[name]) ? '*' : ''; }
+
+function showTip(s,e){
+  const t=document.getElementById('tip'), last=s.tail[s.tail.length-1];
+  const q=quadrant(last[0],last[1]);
+  t.innerHTML=`<strong>${s.name}${adjStar(s.name)}</strong> <span class="q ${quadCls(q)}">${q}</span><br>`+
+    `RS-Ratio ${last[0].toFixed(2)} · RS-Mom ${last[1].toFixed(2)}`+
+    `<br>conviction ${Math.hypot(last[0]-100,last[1]-100).toFixed(2)}`+
+    (s.vol&&s.vol.length?`<br>volatility ${s.vol[s.vol.length-1].toFixed(1)}% annualised`:'')+
+    (s.basis!==undefined?`<br><span class="dim">equal-weight of ${s.basis} of ${s.count}</span>`:'')+
+    (s.exOutliers&&s.exOutliers.length?`<br><span class="dim">excluding ${s.exOutliers.join(', ')}</span>`:'')+
+    (s.sector?`<br><span class="dim">${s.sector}${s.cashOnly?' · cash only':''}</span>`:'')+
+    (s.industry?`<br><span class="dim">${s.industry}</span>`:'');
+  const r=document.querySelector('.rrg-wrap').getBoundingClientRect();
+  t.style.left=Math.min(r.width-190, Math.max(0, e.clientX-r.left+12))+'px';
+  t.style.top=Math.max(0, e.clientY-r.top-10)+'px';
+  t.hidden=false;
+}
+function hideTip(){ document.getElementById('tip').hidden=true; }
+
+function syncChrome(){
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  document.getElementById('sectorPickRow').hidden = !V().grouped;
+  document.getElementById('pickLbl').textContent = V().pickLabel;
+  /* The 3D view carries this hint in its size legend, which 2D hides - so in
+     2D it goes beside the count, where the isolation actually happens. */
+  const fh=document.getElementById('focusHint');
+  if(fh){
+    fh.hidden = (dim==='3');
+    fh.innerHTML = focusKey
+      ? `<strong>${String(focusKey).replace(/</g,'&lt;')}</strong> isolated — double-click anywhere to clear`
+      : `click a bubble to isolate its ${V().pickLabel.toLowerCase()}${V().drillTo?', double-click to open it':''}`;
+  }
+  document.getElementById('rotRow').hidden = (dim!=='3');
+  document.getElementById('sizeLegend').hidden = (dim!=='3');
+  if(dim!=='3') document.getElementById('indLegend').hidden = true;
+  const n=activeSeries().length;
+  document.getElementById('pickHint').textContent =
+    V().grouped && sectorPick==='__all__'
+      ? `${n} ${view==='etfs'?'funds':'stocks'} — pick a ${V().pickLabel.toLowerCase()} for labels and trails`
+      : `${n} plotted`;
+  const ex=(DATA&&DATA.excluded[period])||[];
+  const rows=ex.filter(e=>e.kind!=='sector');
+  /* A name sidelined by a demerger is NOT the same as one that is simply too
+     new, so it is reported as NA with the reason and a count that shows the
+     note clearing itself as the window rolls forward. */
+  const na=rows.filter(e=>e.ca), plain=rows.filter(e=>!e.ca);
+  /* Stated explicitly so the count can be reconciled against the F&O board
+     rather than guessed at: plotted + excluded always equals the whole
+     universe, and the build fails if it does not. */
+  const u=(DATA&&DATA.universe&&DATA.universe[period])||null;
+  const withEx=[];
+  /* No ex-outlier note here: the sector points are funds, so there is no
+     constituent of ours to leave out. The element stays in the markup for the
+     shared stylesheet and is never shown. */
+  const exEl=document.getElementById('basketNote');
+  if(exEl) exEl.hidden = true;
+
+  document.getElementById('exclNote').innerHTML =
+    (na.length ? na.map(e=>`<strong>${esc(e.name)}: NA</strong> — ${esc(e.reason)}.`).join(' ')+' ' : '')
+    + (plain.length ? `Excluded on this timeframe: ${plain.map(e=>esc(e.name)).join(', ')}. ` : '')
+    + (u ? `<br><strong>${u.stocksPlotted}</strong> of ${u.stocksTotal} S&amp;P 500 stocks and `
+         + `<strong>${u.etfsPlotted}</strong> of ${u.etfsTotal} ETFs are plotted on this `
+         + `timeframe; ${u.excluded} excluded above. The constituent list is agreed by two `
+         + `independent sources before it is used, and the build fails if any name is neither `
+         + `plotted nor explained — nothing goes missing quietly.` : '');
+  /* Only the ETF-group baskets can be partial; sectors are funds. */
+  const grp=(DATA&&DATA.etfGroups&&DATA.etfGroups[period])||[];
+  const part=grp.filter(s=>s.basis<s.count);
+  document.getElementById('basisNote').textContent = part.length
+    ? 'Where a member lacks the full window it is left out of its group aggregate rather than '
+      + 'shortening it: ' + part.map(s=>`${s.name} uses ${s.basis} of ${s.count}`).join('; ') + '.'
+    : '';
+}
+
+function wire(attr, fn){
+  document.querySelectorAll(`.controls button[${attr}]`).forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll(`.controls button[${attr}]`).forEach(o=>o.classList.toggle('active',o===b));
+      /* Any control that changes WHAT is plotted clears the isolation: the
+         industry's members differ between sectors and stocks, and carrying a
+         stale focus across meant the next view opened already filtered with
+         no visible reason why. */
+      focusKey=null; focusName=null;
+      fn(b.getAttribute(attr)); syncChrome(); render();
+    });
+  });
+}
+/* Sectors -> that sector's stocks, in one gesture. Mirrors what the View
+   and Sector controls would do by hand, including their active states, so
+   the chrome never disagrees with what is plotted. */
+function drillInto(groupName){
+  const to = V().drillTo;
+  if(!to) return;                        // already in a members view
+  view = to; sectorPick = groupName;
+  fillPick();
+  const sel=document.getElementById('sectorPick');
+  if(![...sel.options].some(o=>o.value===groupName)){ // group with no members
+    view = Object.keys(VIEWS).find(k=>VIEWS[k].drillTo===to) || view;
+    sectorPick='__all__'; fillPick(); return;
+  }
+  sel.value=groupName;
+  document.querySelectorAll('.controls button[data-view]').forEach(b=>
+    b.classList.toggle('active', b.getAttribute('data-view')===to));
+  focusKey=null; focusName=null;
+  syncChrome(); render();
+}
+
+wire('data-view', v=>{view=v; sectorPick='__all__'; fillPick();});
+wire('data-period', p=>{period=p; fillPick();});
+wire('data-tail', t=>{tail=+t;});
+wire('data-dim', d=>{dim=d;});
+wire('data-z', z=>{zaxis=z;});
+document.getElementById('sectorPick').addEventListener('change',e=>{
+  sectorPick=e.target.value; focusKey=null; focusName=null; syncChrome(); render();
+});
+
+/* The picker lists whatever groups the CURRENT view's members actually carry,
+   read off the plotted rows rather than a hard-coded list - a group whose
+   every member was excluded on this timeframe then simply does not appear,
+   instead of offering an option that draws an empty chart. */
+function fillPick(){
+  if(!DATA) return;
+  const rows=(DATA[V().src]||{})[period]||[];
+  const keys=[...new Set(rows.map(s=>s.sector).filter(Boolean))].sort();
+  const sel=document.getElementById('sectorPick');
+  const label=V().pickLabel.toLowerCase();
+  sel.innerHTML=`<option value="__all__">All ${label}s</option>`
+    +keys.map(k=>`<option value="${k}">${k}</option>`).join('');
+  if(!keys.includes(sectorPick)) sectorPick='__all__';
+  sel.value=sectorPick;
+}
+
+async function load(){
+  try{
+    const r=await fetch('rrg_data.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    DATA=await r.json();
+    fillPick();
+    stamp();
+    syncChrome(); render();
+  }catch(e){ setStatus('Could not reach rrg_data.json',true); }
+}
+load();
+setInterval(()=>{ if(DATA) stamp(); }, 5*60*1000);   // amber can arrive while the tab sits open
+
+/* ── positioning from the sibling US boards ───────────────────────────
+   The Indian RRG pulls live rollover and put-call context from its two
+   neighbouring boards. The US equivalents are not built yet, so rather than
+   fetch files that do not exist and swallow the failure silently, this is
+   left out until pcr.html ships and can be read the same way. */
+
+
+/* ── how fresh is this board? ───────────────────────────────────────────
+   generatedAt says when the JOB ran; lastBar says which session it ran ON,
+   and only the second one answers "am I looking at the last close". Both
+   are shown. lastBar is a real NSE session date, so it stays correct
+   through holidays where a calendar guess would not.
+
+   The amber flag is a statement about the JOB, not the data: the rebuild is
+   scheduled for 17:15 ET on weekdays and GitHub's `schedule` trigger has
+   already missed a day and run 7.5h late once on the sibling board, so
+   silence is not evidence that it ran. Known limit: on a US market holiday
+   the build correctly no-ops, generatedAt stays put, and this goes amber
+   anyway - the "bars through" date beside it is what tells you the data is
+   in fact fine. */
+/* Pure, so every branch can be tested against a fabricated clock rather than
+   by waiting for 19:15 on a Tuesday. Overdue = it is a weekday, the 17:15 ET
+   slot passed more than two hours ago, and the newest build still predates
+   that slot.
+
+   Everything is computed in EXCHANGE time, never a fixed offset: the US runs
+   two DST transitions a year, so a hard-coded -05:00 would put the boundary
+   an hour wrong for several weeks twice annually. `slot` is derived by
+   reading the current ET offset off the clock rather than assuming one. */
+function etParts(now){
+  return Object.fromEntries(new Intl.DateTimeFormat('en-GB',
+    {timeZone:'America/New_York', weekday:'short', hour:'2-digit',
+     minute:'2-digit', hour12:false})
+    .formatToParts(now).map(x=>[x.type,x.value]));
+}
+function rebuildOverdue(gen, now){
+  const p=etParts(now);
+  if(['Sat','Sun'].includes(p.weekday)) return false;
+  const mins=+p.hour*60 + +p.minute;
+  if(mins < 19*60+15) return false;                      // not due yet
+  // today's 17:15 ET, found by stepping back from now in exchange minutes
+  const slot=new Date(now.getTime() - (mins - (17*60+15))*60000);
+  return gen < slot;
+}
+window.rebuildOverdue = rebuildOverdue;
+
+function stamp(){
+  const g=new Date(DATA.generatedAt);
+  const fmt=(d,o)=>d.toLocaleString('en-US',Object.assign({timeZone:'America/New_York'},o));
+  let txt='Computed '+fmt(g,{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})+' ET';
+  if(DATA.lastBar){
+    // midday UTC, so the session date cannot slip either way when formatted
+    const b=new Date(DATA.lastBar+'T12:00:00Z');
+    txt+=' · bars through '+fmt(b,{day:'2-digit',month:'short',timeZone:'UTC'});
+  }
+  const overdue = rebuildOverdue(g, new Date());
+  const tag=document.getElementById('statusTag');
+  tag.classList.toggle('overdue', overdue);
+  setStatus(txt+(overdue ? ' · rebuild overdue' : ' · daily rebuild'), false);
+}
+
+/* Width changes (rotating a phone, resizing a window) re-lay the chart out;
+   height-only changes - a mobile URL bar sliding away - do not. */
+let lastChartW=0;
+const relayout=()=>{
+  const w=document.getElementById('chart').parentElement.clientWidth;
+  if(DATA && Math.abs(w-lastChartW)>8){ lastChartW=w; render(); }
+};
+window.addEventListener('resize',()=>{ hideTip(); relayout(); });
+// The chart's own box is watched too: not every width change fires a window
+// resize (e.g. device emulation, some split-screen and WebView transitions).
+if(window.ResizeObserver) new ResizeObserver(relayout).observe(document.querySelector('.rrg-wrap'));
+// label widths are measured with the web font; re-place once it has loaded
+if(document.fonts) document.fonts.ready.then(()=>{ if(DATA) render(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+[submodule "nifty-heatmap-core"]
+	path = nifty-heatmap-core
+	url = https://github.com/abhijeetbishayee-drb/nifty-heatmap-core.git
