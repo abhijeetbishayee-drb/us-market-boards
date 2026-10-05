@@ -3,44 +3,251 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>US Market Boards</title>
+<title>US Market Heatmap</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/app.css?v=20261005a">
 </head>
 <body>
 <div class="wrap">
   <div class="topbar">
     <div class="brand">
-      <h1>US Market Boards</h1>
-      <span class="sub">S&amp;P 500 and ETFs &mdash; the US side of the Nifty boards</span>
+      <h1>US Market &middot; Heatmap</h1>
+      <span class="sub">S&amp;P 500 by GICS sector, plus 112 ETFs by group</span>
     </div>
     <nav class="nav">
-      <a href="index.html" class="active">Home</a>
+      <a href="index.html" class="active">Heatmap</a>
       <a href="rrg.html">RRG<span class="beta">Beta</span></a>
       <span class="nav-sep" aria-hidden="true"></span>
       <a href="../nifty-heatmap-web/" class="away">India</a>
     </nav>
   </div>
 
-  <div class="footnote">
-    <p><strong><a href="rrg.html">Relative Rotation &rarr;</a></strong><br>
-    Relative strength against momentum for the eleven Select Sector SPDRs, 503
-    S&amp;P 500 stocks, 112 ETFs and 8 ETF groups, benchmarked to the S&amp;P 500.
-    Daily and weekly, 2D and 3D, with click-to-isolate and double-click drill-in.</p>
+  <div class="indices-row" id="indicesRow"></div>
 
-    <p style="opacity:.75">Still to come, in the order they were asked for: the
-    S&amp;P 500 heatmap and movers board, the sector board, the 44 EMA board with
-    its inline Point &amp; Figure column, and a put-call ratio board. Rollover has
-    no honest US equivalent &mdash; US equity options carry no monthly rollover
-    convention &mdash; so that one will be answered differently rather than
-    imitated.</p>
+  <div class="meta-row">
+    <div class="legend" id="legend"></div>
+    <div class="status" id="statusTag"><span class="live-dot"></span><span id="statusText">Loading…</span></div>
   </div>
 
-  <div class="disclaimer">Market data: Yahoo Finance (unofficial; may be delayed
-  or inaccurate). For information only &mdash; not investment advice, and not a
-  recommendation to buy, sell or hold any security. Verify with your broker
-  before acting.</div>
+  <div class="meta-row">
+    <div class="controls">
+      <span class="lbl">Show</span>
+      <button type="button" data-show="all" class="active">Everything</button>
+      <button type="button" data-show="stocks">Sectors only</button>
+      <button type="button" data-show="etfs">ETFs only</button>
+      <span class="lbl" style="margin-left:10px;">Sort</span>
+      <button type="button" data-sort="avg" class="active">By change</button>
+      <button type="button" data-sort="name">A–Z</button>
+      <button type="button" data-sort="size">By size</button>
+      <span class="lbl" style="margin-left:10px;">Average</span>
+      <button type="button" data-avg="all" class="active">All</button>
+      <button type="button" data-avg="ex">Ex-outliers</button>
+    </div>
+    <div class="status" id="breadthTag" style="font-family:'IBM Plex Mono',monospace;"></div>
+  </div>
+
+  <div class="sector-strip" id="sectorStrip"></div>
+
+  <div id="sectorBlocks"></div>
+
+  <div class="movers">
+    <div class="mover-panel gainers">
+      <h2>Top Gainers <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-dim);">— off day&rsquo;s low, S&amp;P 500 only</span></h2>
+      <div id="gainersList"></div>
+    </div>
+    <div class="mover-panel losers">
+      <h2>Top Losers <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--text-dim);">— off day&rsquo;s high, S&amp;P 500 only</span></h2>
+      <div id="losersList"></div>
+    </div>
+  </div>
+
+  <div class="footnote ca-note" id="caNote" hidden></div>
+  <div class="footnote ca-note" id="exNote" hidden></div>
+  <div class="footnote">
+    Prices and % change from Yahoo Finance, refreshed about once a minute during US market hours by
+    a GitHub Actions workflow; this page re-reads <code>board_data.json</code> every 30 seconds while
+    open.
+    <br><br>
+    <strong>Each sector row shows two different things, and they are meant to disagree.</strong>
+    The coloured figure is an <strong>equal-weighted average</strong> of that sector&rsquo;s S&amp;P 500
+    constituents — a breadth measure, every name counting once. The bar beside it is the sector&rsquo;s
+    <strong>Select Sector SPDR</strong> and where it sits in its own day range — cap-weighted, so a
+    few giants dominate it. The gap between them is the information: on 5 October 2026 Consumer
+    Discretionary read <strong>+0.02%</strong> equal-weighted against <strong>+1.13%</strong> for
+    XLY, which is Amazon and Tesla carrying a sector whose average name went nowhere.
+    <br><br>
+    Unlike the Indian board there is no fallback bar here: all eleven GICS sectors have an exact,
+    liquid fund, so a missing bar means a <em>fetch</em> failed, not that no index matches — and it
+    says so. ETF groups are shown the same way but have no fund of their own, so they carry only
+    the equal-weighted figure.
+    <br><br>
+    <strong>Corporate actions are withheld, never guessed.</strong> A name trading across a split or
+    spin-off today has its percentage shown as <strong>NA</strong> and is left out of its sector
+    average for that session, because the raw print spans the event rather than measuring a move.
+    It is not adjusted to an estimate: only the historical series has a ratio worth dividing out,
+    and the next session is right on its own. A large move with no corporate event behind it is
+    never touched — on this market those are almost always real.
+    Tile colours use the per-stock scale in the legend; sector figures use a finer scale suited to
+    averages. Tap any tile for that security on Yahoo Finance.
+  </div>
+  <div class="disclaimer">Market data: Yahoo Finance (unofficial; may be delayed or inaccurate). For information only &mdash; not investment advice, and not a recommendation to buy, sell or hold any security. Verify with your broker before acting. <a href="privacy.html" style="color:inherit">Privacy policy</a></div>
 </div>
+
+<script src="assets/app.js?v=20261005a"></script>
+<script>
+renderLegend('legend');
+initBackToTop();
+
+let latest = null;
+let sortMode = 'avg';
+let showMode = 'all';
+let avgMode  = 'all';
+
+/* Which average is on screen. avgPctEx exists only where a constituent is
+   doing something categorically different, so on an ordinary day this returns
+   the same number either way. */
+function shownAvg(s){
+  return (avgMode === 'ex' && s.avgPctEx !== null && s.avgPctEx !== undefined)
+    ? s.avgPctEx : s.avgPct;
+}
+function isAdjusted(s){
+  return avgMode === 'ex' && s.avgPctEx !== null && s.avgPctEx !== undefined;
+}
+
+/* The whole-index block stays pinned at the top in every sort mode, and the
+   ETF groups always sit below the sectors - mixing "Fixed income" into a list
+   sorted beside "Financials" would invite reading one against the other, which
+   is not a comparison that means anything. */
+function blocks(){
+  if(!latest) return [];
+  const secs = (latest.sectors || []).slice();
+  const etfs = (latest.etfGroups || []).slice();
+  const pinned = secs.filter(s => s.pinned);
+  const rest   = secs.filter(s => !s.pinned);
+  const order = arr => {
+    if(sortMode === 'name') arr.sort((a,b) => a.sector.localeCompare(b.sector));
+    else if(sortMode === 'size') arr.sort((a,b) => b.count - a.count);
+    else arr.sort((a,b) => (shownAvg(b) ?? -999) - (shownAvg(a) ?? -999));
+    return arr;
+  };
+  if(showMode === 'etfs') return order(etfs);
+  if(showMode === 'stocks') return pinned.concat(order(rest));
+  return pinned.concat(order(rest), order(etfs));
+}
+
+function rangeHtml(s){
+  const i = s.index;
+  if(i && i.dayHigh > i.dayLow){
+    let pos = (i.price - i.dayLow) / (i.dayHigh - i.dayLow) * 100;
+    pos = Math.min(100, Math.max(0, pos));
+    const up = i.pct >= 0;
+    return `
+      <span class="idx-range" title="${i.label}${i.name ? ' — ' + i.name : ''} day range">
+        <span class="lo">${fmtCompact(i.dayLow)}</span>
+        <span class="bar"><span class="dot" style="left:${pos.toFixed(1)}%"></span></span>
+        <span class="hi">${fmtCompact(i.dayHigh)}</span>
+      </span>
+      <span class="idx-meta">
+        <span class="lbl">${i.label}</span>
+        <span class="px">${i.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
+        <span class="pc ${up?'up':'down'}">${fmtPct(i.pct)}</span>
+      </span>`;
+  }
+  if(s.kind === 'etf'){
+    return `<span class="idx-none">no single fund covers this group<br><span class="sub2">equal-weighted across ${s.count} members</span></span>`;
+  }
+  // Every GICS sector HAS a fund, so this branch is a fetch failure, not a
+  // mapping gap, and must not read like one.
+  return `<span class="idx-none">sector fund did not load this run</span>`;
+}
+
+function stripHtml(list){
+  return list.map(s => `
+    <a class="sector-row${s.pinned ? ' pinned' : ''}" href="#${slug(s.sector)}">
+      <span class="nm">${s.sector}</span>
+      <span class="vl ${sectorBucket(shownAvg(s))}">${fmtPct(shownAvg(s))}</span>
+      ${rangeHtml(s)}
+    </a>`).join('');
+}
+
+function blockHtml(s){
+  const rated = s.up + s.down + s.flat;
+  const upPct   = rated ? (s.up   / rated * 100) : 0;
+  const downPct = rated ? (s.down / rated * 100) : 0;
+  return `
+    <section class="sector-block${s.pinned ? ' pinned' : ''}" id="${slug(s.sector)}">
+      <div class="sector-head">
+        <h2>${s.sector}</h2>
+        <span class="n">${s.count}</span>
+        <span class="avg ${sectorBucket(shownAvg(s))}">${fmtPct(shownAvg(s))}</span>${isAdjusted(s) ? `<span class="ex-tag" title="${s.avgPct.toFixed(2)}% with every constituent; this average leaves out ${s.exOutliers.join(', ')}">ex ${s.exOutliers.join(', ')}</span>` : ''}
+        <span class="breadth">
+          <span>${s.up}&#9650; ${s.down}&#9660;</span>
+          <span class="breadth-bar">
+            <span class="up" style="width:${upPct.toFixed(1)}%"></span>
+            <span class="down" style="width:${downPct.toFixed(1)}%"></span>
+          </span>
+        </span>
+      </div>
+      <div class="grid">${s.rows.map(tileHtml).join('')}</div>
+    </section>`;
+}
+
+function renderExNote(list){
+  const el=document.getElementById('exNote'); if(!el) return;
+  const hits=list.filter(x=>x.avgPctEx!==null&&x.avgPctEx!==undefined);
+  if(!hits.length){ el.hidden=true; el.innerHTML=''; return; }
+  el.hidden=false;
+  const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  el.innerHTML='<strong>A constituent is distorting its group average today.</strong> '
+    + hits.map(x=>`<strong>${esc(x.sector)}</strong> reads ${fmtPct(x.avgPct)} with every name and `
+        + `${fmtPct(x.avgPctEx)} without ${esc(x.exOutliers.join(', '))}`).join('; ')
+    + '. An equal-weighted average is one name away from being a story about that name, so the '
+    + '<em>Average</em> control offers both. A name qualifies only by moving unlike its own peers '
+    + '<em>and</em> by a wide margin from the group median. When a whole group moves together nobody '
+    + 'is flagged and the average stands. Nothing is hidden: the tile is still on the board.';
+}
+
+function paint(){
+  if(!latest) return;
+  const list = blocks();
+  document.getElementById('sectorStrip').innerHTML = stripHtml(list);
+  document.getElementById('sectorBlocks').innerHTML = list.map(blockHtml).join('');
+  renderExNote(list);
+  renderCaNote(list.flatMap(s => s.rows || []));
+}
+
+function render(data){
+  latest = data;
+  const idx = data.indices || {};
+  const labels = data.indexLabels || {};
+  document.getElementById('indicesRow').innerHTML =
+    Object.keys(labels).map(k => indexCardHtml(labels[k], idx[k])).join('');
+
+  const b = data.breadth;
+  document.getElementById('breadthTag').textContent =
+    b ? `${b.advancers} advancing · ${b.decliners} declining of ${b.total}` : '';
+
+  paint();
+  document.getElementById('gainersList').innerHTML = moversList(data.gainers, 'offLow');
+  document.getElementById('losersList').innerHTML = moversList(data.losers, 'offHigh');
+}
+
+function wire(attr, set){
+  document.querySelectorAll(`.controls button[${attr}]`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll(`.controls button[${attr}]`).forEach(b =>
+        b.classList.toggle('active', b === btn));
+      set(btn.getAttribute(attr));
+      paint();
+    });
+  });
+}
+wire('data-sort', v => { sortMode = v; });
+wire('data-avg',  v => { avgMode  = v; });
+wire('data-show', v => { showMode = v; });
+
+startPolling('board_data.json', render);
+</script>
 </body>
 </html>

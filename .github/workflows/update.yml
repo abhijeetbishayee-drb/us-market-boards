@@ -1,0 +1,66 @@
+name: Update US board
+
+# WHY workflow_dispatch AND NOT schedule.
+# Measured on the sibling Indian boards: a high-frequency `schedule` asked for
+# 96 runs a day and delivered about 2, at erratic times, leaving the board
+# 14.6h stale mid-session. The reliable path is an external pinger
+# (cron-job.org) calling the workflow_dispatch REST API.
+#
+# Leaving `schedule` in as a backstop is NOT free - it would remove the cron
+# window the pinger relies on - so the market-hours gate lives in the script
+# itself (us_market_core.is_market_hours), which also means a ping outside US
+# hours costs one no-op rather than a 615-symbol fetch.
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Build even outside US market hours"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+# Never two at once: a per-minute pinger plus a slow Yahoo sweep would
+# otherwise queue runs that each try to commit the same file.
+concurrency:
+  group: us-board
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Fetch the snapshot
+        run: |
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            python3 scripts/fetch_data.py --force
+          else
+            python3 scripts/fetch_data.py
+          fi
+
+      - name: Commit if the snapshot changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- board_data.json; then
+            echo "board_data.json unchanged - nothing to commit"
+            exit 0
+          fi
+          git add board_data.json
+          # Pull with rebase before pushing: the daily RRG job commits to the
+          # same branch, and a per-minute writer that assumes it is alone will
+          # eventually lose a race with it.
+          git commit -m "US board: $(date -u +%H:%M) UTC snapshot"
+          git pull --rebase --autostash origin main
+          git push

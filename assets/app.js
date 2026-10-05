@@ -1,6 +1,11 @@
-/* Shared rendering helpers for the Nifty 50 board (index.html) and the
-   F&O sector board (sectors.html). Both pages import this file, so the tile,
-   day-range, index-card and movers components cannot drift apart. */
+/* Shared rendering helpers for the US boards. Forked from the Nifty version
+   and localised in four places only - currency, number locale, the quote link
+   and the status timezone - so the tile, day-range, index-card and movers
+   components stay recognisably the same components.
+
+   The fork is deliberate rather than a shared file: the two differ in every
+   one of those four, and a runtime market flag threaded through every helper
+   would be more fragile than two small files that each read straightforwardly. */
 
 const POLL_MS = 30000;
 const STALE_MS = 20 * 60 * 1000; // flag if the data file hasn't updated in 20 min
@@ -35,19 +40,26 @@ function sectorBucket(pct){
 }
 
 function fmtPrice(p){
-  return p === null || p === undefined ? 'N/A' : '₹' + p.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return p === null || p === undefined ? 'N/A' : '$' + p.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 function fmtPct(p){
   if(p === null || p === undefined) return '—';
   const sign = p >= 0 ? '+' : '';
   return sign + p.toFixed(2) + '%';
 }
+/* Adaptive precision. The Indian boards show index levels in the thousands,
+   where whole numbers are right. Here the same slot carries a sector FUND:
+   XLU trades near $39.83 with a day range of about 20 cents, so rounding to
+   whole numbers printed "40 — 40" and the bar looked broken. Below $1,000 the
+   figure keeps two decimals; above it, none. */
 function fmtCompact(p){
-  return p === null || p === undefined ? '—' : p.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  if(p === null || p === undefined) return '—';
+  return p.toLocaleString('en-US', p < 1000
+    ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    : { maximumFractionDigits: 0 });
 }
-function nseUrl(ticker){
-  const symbol = ticker.replace(/\.NS$/, '');
-  return `https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(symbol)}`;
+function quoteUrl(ticker){
+  return `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
 }
 function slug(s){
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -74,24 +86,25 @@ function dayRangeBar(r){
    like-for-like move; a demerger has no such ratio, so it reads NA. */
 function caTag(r){
   if(!r.ca) return '';
-  const what = /split/i.test(r.ca.what) ? 'ex-split'
-             : /bonus/i.test(r.ca.what) ? 'ex-bonus' : 'ex-demerger';
-  return `<div class="ca-tag${r.ca.adjusted ? '' : ' na'}">${what}${r.ca.adjusted ? ' · adj' : ''}</div>`;
+  const what = /split/i.test(r.ca.what) ? 'ex-split' : 'ex-spin-off';
+  return `<div class="ca-tag na">${what}</div>`;
 }
 function caTitle(r){
   if(!r.ca) return '';
-  return ` · Ex ${r.ca.what} (${r.ca.date}). Raw print ${fmtPct(r.ca.rawPct)} is an artefact; `
-    + (r.ca.adjusted
-        ? 'shown adjusted for the announced ratio, which is the real move.'
-        : 'a demerger has no like-for-like change, so this reads NA today.');
+  return ` · ${r.ca.what} (${r.ca.date}). Today's raw print ${fmtPct(r.ca.rawPct)} spans the `
+    + 'event, so it is withheld rather than averaged into the sector. Tomorrow the figure is '
+    + 'right on its own.';
 }
 
-/* One stock tile: name, price, % change, day-range bar, click through to NSE. */
+/* One tile: name, price, % change, day-range bar, click through to the quote.
+   Used for both stocks and ETFs - an ETF row has the same shape, so the two
+   kinds of block are rendered by the same component rather than by two that
+   could drift. */
 function tileHtml(r){
   const pctText = (r.ca && !r.ca.adjusted) ? 'NA' : fmtPct(r.pct);
   return `
-    <a class="tile ${bucket(r.pct)}${r.cashOnly ? ' cash-only' : ''}${r.ca ? ' ex-ca' : ''}" href="${nseUrl(r.ticker)}" target="_blank" rel="noopener noreferrer" title="Day range: ${fmtPrice(r.dayLow)} – ${fmtPrice(r.dayHigh)}${r.cashOnly ? ' · cash only, no F&O' : ''}${caTitle(r)} · View on NSE">
-      <div class="name">${r.name}${r.ca ? '<span class="adj-star" title="price history adjusted for a corporate action">*</span>' : ''}</div>
+    <a class="tile ${bucket(r.pct)}${r.ca ? ' ex-ca' : ''}" href="${quoteUrl(r.ticker)}" target="_blank" rel="noopener noreferrer" title="${r.full ? r.full + ' · ' : ''}Day range: ${fmtPrice(r.dayLow)} – ${fmtPrice(r.dayHigh)}${caTitle(r)} · View on Yahoo Finance">
+      <div class="name">${r.name}${r.ca ? '<span class="adj-star" title="corporate action today — see the note below the board">*</span>' : ''}</div>
       <div class="figures">
         <div class="price">${fmtPrice(r.price)}</div>
         <div class="pct">${pctText}</div>
@@ -111,7 +124,7 @@ function indexCardHtml(displayName, idx){
     <div class="index-card-head">
       <span class="idx-name">${displayName}</span>
       <span class="idx-figures">
-        <span class="idx-price">${idx.price.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        <span class="idx-price">${idx.price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
         <span class="idx-delta ${up ? 'up':'down'}">${up?'+':''}${idx.pct.toFixed(2)}% (${up?'+':''}${idx.pts.toFixed(1)} pts)</span>
       </span>
     </div>
@@ -125,10 +138,10 @@ function indexCardHtml(displayName, idx){
     rangeHtml = `
       <div class="range-visual">
         <div class="track-line"></div>
-        <div class="end-pill low">${idx.dayLow.toLocaleString('en-IN',{maximumFractionDigits:0})}</div>
-        <div class="end-pill high">${idx.dayHigh.toLocaleString('en-IN',{maximumFractionDigits:0})}</div>
+        <div class="end-pill low">${idx.dayLow.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        <div class="end-pill high">${idx.dayHigh.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
         <div class="cur-stem" style="left:${leftExpr}"></div>
-        <div class="cur-pill" style="left:${leftExpr}">${idx.price.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>
+        <div class="cur-pill" style="left:${leftExpr}">${idx.price.toLocaleString('en-US',{maximumFractionDigits:2})}</div>
         <div class="cur-dot" style="left:${leftExpr}"></div>
       </div>
     `;
@@ -179,9 +192,9 @@ function startPolling(dataFile, renderFn){
       const generated = new Date(data.generatedAt);
       const ageMs = Date.now() - generated.getTime();
       const ageMin = Math.round(ageMs / 60000);
-      const timeStr = generated.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const timeStr = generated.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const stale = ageMs > STALE_MS;
-      setStatus(`Updated ${timeStr} IST · ${ageMin < 1 ? 'just now' : ageMin + 'm ago'}${stale ? ' (stale)' : ''}`, stale);
+      setStatus(`Updated ${timeStr} ET · ${ageMin < 1 ? 'just now' : ageMin + 'm ago'}${stale ? ' (stale)' : ''}`, stale);
     }catch(e){
       setStatus(`Could not reach ${dataFile} — retrying…`, true);
     }
@@ -235,15 +248,14 @@ function renderCaNote(rows){
   const hits = (rows || []).filter(r => r && r.ca);
   if(!hits.length){ el.hidden = true; el.innerHTML = ''; return; }
   el.hidden = false;
-  el.innerHTML = '<strong>Trading ex a corporate action today.</strong> '
-    + hits.map(r => {
-        const base = `<strong>${r.name}</strong> — ex ${r.ca.what} (${r.ca.date}), `
-          + `raw print ${fmtPct(r.ca.rawPct)}`;
-        return base + (r.ca.adjusted
-          ? `, shown adjusted to <strong>${fmtPct(r.pct)}</strong> using the announced ratio.`
-          : `, shown as <strong>NA</strong>: a demerger changes the company itself, so there`
-            + ` is no like-for-like change to quote, and the name is left out of its sector average.`);
-      }).join(' ')
-    + ' The raw figure is an artefact of the share count or the company changing overnight, not a move. '
-    + 'Large moves that are <em>not</em> a listed corporate action are never rewritten.';
+  el.innerHTML = '<strong>Trading across a corporate action today.</strong> '
+    + hits.map(r => `<strong>${r.name}</strong> — ${r.ca.what} (${r.ca.date}), `
+        + `raw print ${fmtPct(r.ca.rawPct)}, shown as <strong>NA</strong> and left out of its `
+        + `sector average.`).join(' ')
+    + ' The raw figure spans the event rather than measuring a move, and this session is the only '
+    + 'one affected — tomorrow the name is right on its own. Nothing is rewritten to a guess: the '
+    + 'figure is withheld, not adjusted, because only the historical series has a ratio worth '
+    + 'dividing out. Large moves that are <em>not</em> backed by a corporate event are never '
+    + 'touched at all.';
 }
+
