@@ -187,6 +187,11 @@
   .tile:hover{ transform:translateY(-2px); box-shadow:0 4px 14px color-mix(in srgb, currentColor 22%, transparent); }
   .tile:focus-visible{ outline:2px solid var(--info); outline-offset:2px; }
   .tile .name{ font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:12.5px; letter-spacing:0.01em; }
+  /* Company / fund name under the ticker: US tickers (STX, URI...) mean little
+     on their own, and the title tooltip never shows on a phone. One line,
+     ellipsized, so long names cannot change the tile height. */
+  .tile .full{ font-size:10.5px; line-height:1.2; margin-top:-4px; opacity:0.78;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tile .figures{ display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
   .tile .price{ font-family:"IBM Plex Mono",monospace; font-size:11px; font-variant-numeric:tabular-nums; opacity:0.92; }
   .tile .pct{ font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:12.5px; font-variant-numeric:tabular-nums; }
@@ -233,7 +238,9 @@
   }
   .mover-row:last-child{ border-bottom:none; }
   .mover-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
-  .mover-row .m-name{ font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:13px; color:var(--text); }
+  .mover-row .m-name{ font-family:"IBM Plex Sans Condensed",sans-serif; font-weight:600; font-size:13px; color:var(--text);
+                      flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mover-row .m-full{ margin-left:6px; font-weight:400; font-size:11.5px; color:var(--text-dim); }
   .mover-row .m-price{ color:var(--text-dim); }
   .mover-row .m-pct{ font-weight:700; min-width:64px; text-align:right; }
   .gainers .m-pct{ color:var(--b-gain-3); }
