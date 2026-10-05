@@ -578,6 +578,10 @@
    the row breaks mid-group and a toggle lands alone on the next line, where
    it reads as unrelated - which is exactly how the 3D toggle got missed. */
 .ctl-group{ display:inline-flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+/* A group stays one unit, but if it ALONE is wider than the screen (the
+   four-option View group on a 360dp phone at 130% font: 341px in 320px) it
+   wraps inside itself instead of pushing the page sideways. */
+@media (max-width:480px){ .ctl-group{ flex-wrap:wrap; max-width:100%; } }
 .controls{ gap:6px 14px; }
 
 /* RRG globe frame + industry threads */
