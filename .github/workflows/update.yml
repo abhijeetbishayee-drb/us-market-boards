@@ -44,6 +44,10 @@ on:
         description: "Build even outside US market hours"
         required: false
         default: "false"
+      chain_once:
+        description: "Hand off exactly once regardless of phase (to prove the chain works)"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -156,7 +160,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          if [ "${{ steps.phase.outputs.phase }}" = "stop" ]; then
+          # chain_once is a TEST handle and is bounded by construction: the
+          # handoff dispatches with no inputs, so the run it starts has
+          # chain_once=false and stops at the phase gate. One extra run, never
+          # a runaway chain.
+          if [ "${{ github.event.inputs.chain_once }}" != "true" ] \
+             && [ "${{ steps.phase.outputs.phase }}" = "stop" ]; then
             echo "phase is stop — chain ends here; a morning cron starts the next one"
             exit 0
           fi
