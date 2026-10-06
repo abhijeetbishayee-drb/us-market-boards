@@ -152,3 +152,33 @@ def fetch_all_closes(tickers, workers=16, rng="5y", interval="1d"):
             t, pairs = f.result()
             out[t] = pairs
     return out
+
+
+# ── Chain phase, for the self-chaining refresh ──────────────────────────
+# A self-chaining workflow needs a STOP condition or it runs for ever. The
+# phases are deliberately wider than `is_market_hours`: the chain must already
+# be alive before the opening print and must outlive the closing one, while
+# the fetchers themselves stay gated to the regular session.
+#
+#   warm   09:00-09:30 ET   chain running, fetchers skipping
+#   live   09:30-16:05 ET   chain running, fetchers fetching
+#   stop   otherwise        chain ends; the morning cron starts the next one
+#
+# Weekends stop. US market holidays are NOT handled, on purpose and for the
+# reason the rest of this stack settled on: a holiday list that silently goes
+# stale STOPS a board, whereas a chain running on a closed exchange costs a
+# few no-op runs. A missing holiday firing a job has bitten this stack before.
+CHAIN_WARM = (9, 0)
+CHAIN_STOP = (16, 5)
+
+
+def market_phase(now=None):
+    now = now or now_et()
+    if now.weekday() >= 5:
+        return "stop"
+    mins = now.hour * 60 + now.minute
+    if mins < CHAIN_WARM[0] * 60 + CHAIN_WARM[1]:
+        return "stop"
+    if mins >= CHAIN_STOP[0] * 60 + CHAIN_STOP[1]:
+        return "stop"
+    return "live" if is_market_hours(now) else "warm"

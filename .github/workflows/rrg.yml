@@ -11,6 +11,20 @@ name: Rebuild US boards (daily)
 # itself against the last 17:00 ET boundary, so a duplicate or late ping is a
 # no-op rather than a wasted 615-symbol fetch.
 on:
+  # REDUNDANT CRONS, not one. A single `schedule` line fires unreliably and
+  # sometimes not at all (fno-rollover's weekly cron fired zero times in its
+  # life while showing `active`), so the daily rebuild gets several chances
+  # across the post-close window, in both US clock offsets. This is only safe
+  # because duplicates are no-ops: build_rrg.py --if-stale and
+  # daily_levels.py --if-stale both re-check against the last close and exit.
+  #
+  # The minute chain ALSO kicks this job once after the close, which is the
+  # path that actually works; these are the backstop for a day the chain never
+  # started.
+  schedule:
+    - cron: '30 21 * * 1-5'     # 17:30 ET (EDT) / 16:30 ET (EST)
+    - cron: '30 22 * * 1-5'     # 18:30 / 17:30 ET
+    - cron: '30 1 * * 2-6'      # well after the close, both offsets
   workflow_dispatch:
     inputs:
       force:
@@ -52,7 +66,7 @@ jobs:
       # Not gated on --if-stale: unlike the RRG this is cheap to repeat and
       # yfinance occasionally drops a symbol, so a second run is a repair.
       - name: Rebuild the EMA board's levels and PnF
-        run: python3 scripts/daily_levels.py
+        run: python3 scripts/daily_levels.py --if-stale
         continue-on-error: true
 
       - name: Commit if the data changed

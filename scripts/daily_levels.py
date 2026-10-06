@@ -211,7 +211,28 @@ def build_row(sym, meta, df):
     return row
 
 
+def is_stale() -> bool:
+    """True unless levels.json already covers the latest close.
+
+    Redundant daily crons are only safe if a duplicate is a no-op, and this is
+    what makes it one: three cron lines instead of one is the measured remedy
+    for `schedule` firing zero times, but without this check each extra line
+    would mean another 615-symbol, two-year fetch for an identical result.
+    """
+    path = DATA / "levels.json"
+    if not path.exists():
+        return True
+    try:
+        gen = datetime.fromisoformat(json.loads(path.read_text())["generated_at"])
+    except Exception:
+        return True
+    return gen.astimezone(U.EXCHANGE_TZ) < U.last_post_close()
+
+
 def main() -> int:
+    if "--if-stale" in sys.argv and not is_stale():
+        print("levels.json already covers the latest close; skipping")
+        return 0
     meta = {}
     for sym in U.SPX_ALL:
         meta[sym] = {"name": U.display_name(sym), "kind": "stock",

@@ -1,16 +1,43 @@
 name: Update US boards (minute)
 
-# WHY workflow_dispatch AND NOT schedule.
-# Measured on the sibling Indian boards: a high-frequency `schedule` asked for
-# 96 runs a day and delivered about 2, at erratic times, leaving the board
-# 14.6h stale mid-session. The reliable path is an external pinger
-# (cron-job.org) calling the workflow_dispatch REST API.
+# HOW THIS ACHIEVES A ONE-MINUTE CADENCE WITHOUT AN EXTERNAL PINGER.
 #
-# Leaving `schedule` in as a backstop is NOT free - it would remove the cron
-# window the pinger relies on - so the market-hours gate lives in the script
-# itself (us_market_core.is_market_hours), which also means a ping outside US
-# hours costs one no-op rather than a 615-symbol fetch.
+# `schedule` is not a cadence, it is a hint, and that is measured rather than
+# assumed. Across these boards: nifty-ema-board asked for 288 runs/day on */5
+# and got 5, at 4-6h gaps; nifty-pcr-tracker asked 96/day and got ~2, sitting
+# 14.6h stale mid-session; fno-rollover's weekly cron fired ZERO times in its
+# life while showing `active`. So a */1 cron here would simply not run, and
+# this board proved the point by sitting on a 1,365-minute-old snapshot.
+#
+# The remedy is a SELF-CHAINING dispatch: the last step of each run dispatches
+# the next one. `workflow_dispatch` is one of the two events GITHUB_TOKEN is
+# allowed to trigger, so nothing is throttled, and no PAT or third-party
+# pinger is involved. Measured cadence on the sibling board: ~57s.
+#
+# The details below are each load-bearing:
+#
+#   * `actions: write` - without it the handoff cannot dispatch.
+#   * `cancel-in-progress: false` - the group then holds one running plus one
+#     pending and rejects further pending dispatches, so if two chains ever
+#     start they collapse into one by themselves. With `true` they would keep
+#     cancelling each other instead.
+#   * handoff on `!cancelled()` - NOT `always()`, which would resurrect a
+#     chain that concurrency deliberately collapsed, and NOT `success()`,
+#     which would end the whole trading day on one failed Yahoo fetch.
+#   * a PHASE GATE - a chain with no stop condition runs for ever. The chain
+#     lives 09:00-16:05 ET on weekdays; `schedule` exists only to start it.
 on:
+  schedule:
+    # Starters only, never the cadence. Several lines because a single cron
+    # demonstrably fires zero times, and both US clock offsets are covered
+    # (09:00 ET is 13:00 UTC in EDT, 14:00 UTC in EST). A starter that fires
+    # in the wrong phase stops immediately and costs nothing.
+    - cron: '55 12 * * 1-5'
+    - cron: '5 13 * * 1-5'
+    - cron: '55 13 * * 1-5'
+    - cron: '5 14 * * 1-5'
+    # mid-session recovery, in case a chain dies and no starter is due
+    - cron: '20 15,17,19 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
@@ -20,12 +47,11 @@ on:
 
 permissions:
   contents: write
+  actions: write          # the handoff dispatches this same workflow
 
-# Never two at once: a per-minute pinger plus a slow Yahoo sweep would
-# otherwise queue runs that each try to commit the same file.
 concurrency:
   group: us-board
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -41,6 +67,16 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      # Read once, up front, so every later step agrees on the phase even if
+      # the run straddles a boundary.
+      - name: Work out the market phase
+        id: phase
+        run: |
+          p=$(python3 -c "import sys; sys.path.insert(0,'.'); \
+            import us_market_core as U; print(U.market_phase())")
+          echo "phase=$p" >> "$GITHUB_OUTPUT"
+          echo "US market phase: $p"
+
       - name: Fetch the snapshot
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
@@ -49,10 +85,8 @@ jobs:
             python3 scripts/fetch_data.py
           fi
 
-      # The EMA board's spot file is the other minute-cadence artefact, and it
-      # is small. Running it in the SAME job means one pinger covers both
-      # boards rather than two, and the two files commit together instead of
-      # racing each other for the branch.
+      # The EMA board's spot file is the other minute-cadence artefact and it
+      # is small, so it rides the same job rather than earning its own chain.
       - name: Refresh the EMA board's spot prices
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
@@ -63,8 +97,7 @@ jobs:
         continue-on-error: true
 
       # Open interest only settles overnight, but volume moves all session and
-      # the whole chain is one request per underlying, so PCR rides the same
-      # minute cadence rather than earning a third pinger.
+      # the whole chain is one request per underlying.
       - name: Refresh the put-call ratios
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
@@ -74,7 +107,7 @@ jobs:
           fi
         continue-on-error: true
 
-      - name: Commit if the snapshot changed
+      - name: Commit if anything changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -83,9 +116,50 @@ jobs:
             exit 0
           fi
           git add board_data.json data/spot.json data/pcr.json
-          # Pull with rebase before pushing: the daily RRG job commits to the
-          # same branch, and a per-minute writer that assumes it is alone will
-          # eventually lose a race with it.
-          git commit -m "US board: $(date -u +%H:%M) UTC snapshot"
+          git commit -m "US boards: $(date -u +%H:%M) UTC snapshot"
+          # The daily job writes to this branch too, and a per-minute writer
+          # that assumes it is alone will eventually lose a race with it.
           git pull --rebase --autostash origin main
           git push
+
+      # ── the daily rebuild rides on THIS cadence, not on `schedule` ──
+      # Idempotent by construction: it asks whether the daily workflow has run
+      # since today's post-close slot and dispatches only if it has not, so
+      # every later run in the chain finds it and does nothing. It must never
+      # fail the price job - a broken kicker must not stop prices updating.
+      - name: Kick the daily rebuild once the US cash market has closed
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          slot=$(python3 -c "import sys; sys.path.insert(0,'.'); \
+            import us_market_core as U; n=U.now_et(); \
+            print('yes' if n.weekday()<5 and n.hour>=16 else 'no')")
+          if [ "$slot" != "yes" ]; then echo "not past the close yet"; exit 0; fi
+          cutoff="$(date -u +%Y-%m-%d)T00:00:00Z"
+          n=$(gh run list --workflow=rrg.yml --limit 40 --json createdAt \
+                -q "[.[] | select(.createdAt >= \"$cutoff\")] | length") || n=""
+          if [ -z "$n" ]; then echo "could not read run history, not dispatching"; exit 0; fi
+          if [ "$n" -eq 0 ]; then
+            gh workflow run rrg.yml && echo "dispatched the daily rebuild"
+          else
+            echo "daily rebuild already ran today ($n run(s))"
+          fi
+
+      # ── hand off to the next run ──────────────────────────────────────
+      # LAST step, and the only thing that produces the cadence. See the
+      # header for why this is `!cancelled()` rather than always()/success().
+      - name: Hand off to the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ "${{ steps.phase.outputs.phase }}" = "stop" ]; then
+            echo "phase is stop — chain ends here; a morning cron starts the next one"
+            exit 0
+          fi
+          gh workflow run update.yml \
+            && echo "dispatched the next run" \
+            || echo "handoff dispatch failed; a recovery cron will restart the chain"
