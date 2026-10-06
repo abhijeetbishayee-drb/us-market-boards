@@ -24,6 +24,58 @@ from us_market_core import board as B
 from nifty_heatmap_core import fetch_all, compute_movers, summarize_group
 
 OUT = os.path.join(REPO_ROOT, "board_data.json")
+SPOT_OUT = os.path.join(REPO_ROOT, "data", "spot.json")
+
+
+def write_spot(stocks, generated_at):
+    """Write the EMA board's spot file from the sweep THIS script already did.
+
+    refresh_spot.py used to re-fetch the same 614 symbols through yfinance,
+    which measured 41s against the 12s this sweep takes for 615 - more than
+    half the minute job's whole runtime, spent fetching prices we already had
+    in memory. Two sweeps for one set of prices also meant the heatmap and the
+    EMA board could show different prices for the same name at the same
+    moment, which no amount of care in either script would have fixed.
+
+    refresh_spot.py is kept for standalone use (it can rebuild spot.json
+    without touching the heatmap), but it is no longer in the minute chain.
+
+    Carry-forward is preserved from it: a symbol that failed keeps its previous
+    price and is listed as stale, because a board showing a ten-minute-old
+    price as if it were live is worse than one that admits it is behind.
+    """
+    prev = {}
+    try:
+        with open(SPOT_OUT) as f:
+            prev = (json.load(f) or {}).get("spot", {})
+    except Exception:
+        prev = {}
+
+    want = []
+    try:
+        with open(os.path.join(REPO_ROOT, "data", "levels.json")) as f:
+            want = sorted({r["symbol"] for r in json.load(f)["rows"]})
+    except Exception:
+        # levels.json is built by the daily job; before its first run fall back
+        # to the whole sweep rather than writing nothing.
+        want = sorted(stocks)
+
+    spot, stale, fresh = {}, [], 0
+    for sym in want:
+        px = stocks.get(sym, (None,))[0]
+        if px is not None:
+            spot[sym] = round(px, 2)
+            fresh += 1
+        elif sym in prev:
+            spot[sym] = prev[sym]
+            stale.append(sym)
+
+    os.makedirs(os.path.dirname(SPOT_OUT), exist_ok=True)
+    with open(SPOT_OUT, "w") as f:
+        json.dump({"generated_at": generated_at, "fresh": fresh,
+                   "total": len(want), "stale": sorted(stale),
+                   "spot": spot}, f, separators=(",", ":"))
+    return fresh, len(want), len(stale)
 
 
 def sort_by_pct(rows):
@@ -107,6 +159,16 @@ def main():
     }
     with open(OUT, "w") as f:
         json.dump(payload, f, separators=(",", ":"))
+
+    # The EMA board's spot file, from the sweep just done rather than a second
+    # one. Must never fail the heatmap write that precedes it.
+    try:
+        sf, st, ss = write_spot(stocks, U.now_et().isoformat())
+        print(f"  spot.json: {sf}/{st} fresh"
+              + (f", {ss} carried forward as stale" if ss else ""))
+    except Exception as e:
+        print(f"  spot.json NOT written ({type(e).__name__}: {e}) — the EMA "
+              "board will fall back to its last daily close")
 
     print(f"wrote board_data.json — {loaded}/{len(universe)} loaded, "
           f"{len(sectors)} sectors, {len(etf_groups)} ETF groups, "

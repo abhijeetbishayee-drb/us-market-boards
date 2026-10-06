@@ -68,6 +68,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip            # ~11s of a ~60s job, every single run
 
       - run: pip install -r requirements.txt
 
@@ -89,16 +90,11 @@ jobs:
             python3 scripts/fetch_data.py
           fi
 
-      # The EMA board's spot file is the other minute-cadence artefact and it
-      # is small, so it rides the same job rather than earning its own chain.
-      - name: Refresh the EMA board's spot prices
-        run: |
-          if [ "${{ github.event.inputs.force }}" = "true" ]; then
-            python3 scripts/refresh_spot.py --force
-          else
-            python3 scripts/refresh_spot.py
-          fi
-        continue-on-error: true
+      # No separate spot step: fetch_data.py writes data/spot.json from the
+      # sweep it has already done. refresh_spot.py was re-fetching the same
+      # 614 symbols through yfinance at 41s against that sweep's 12s - more
+      # than half this job's runtime for prices already in memory, and it let
+      # the two boards disagree about the same name at the same moment.
 
       # Open interest only settles overnight, but volume moves all session and
       # the whole chain is one request per underlying.
