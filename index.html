@@ -79,10 +79,14 @@
     Discretionary read <strong>+0.02%</strong> equal-weighted against <strong>+1.13%</strong> for
     XLY, which is Amazon and Tesla carrying a sector whose average name went nowhere.
     <br><br>
-    Unlike the Indian board there is no fallback bar here: all eleven GICS sectors have an exact,
-    liquid fund, so a missing bar means a <em>fetch</em> failed, not that no index matches — and it
-    says so. ETF groups are shown the same way but have no fund of their own, so they carry only
-    the equal-weighted figure.
+    All eleven GICS sectors have an exact, liquid fund, so a missing bar there means a
+    <em>fetch</em> failed rather than that no index matches — and it says so. <strong>ETF groups
+    have no fund of their own</strong>, so they fall back to the same constituent-derived envelope
+    the Indian board uses for its eleven sectors with no matching NSE index: each member&rsquo;s own
+    day low and high as a % move from its own previous close, averaged equal-weight. That bar is
+    drawn <strong>muted and dashed</strong> on purpose. It is an <em>envelope</em>, not an index — it
+    treats every member&rsquo;s low as simultaneous, which no real index does — so read it as
+    &ldquo;how far the average member travelled today&rdquo;, never as a level.
     <br><br>
     <strong>Corporate actions are withheld, never guessed.</strong> A name trading across a split or
     spin-off today has its percentage shown as <strong>NA</strong> and is left out of its sector
@@ -155,6 +159,37 @@ function rangeHtml(s){
         <span class="px">${i.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
         <span class="pc ${up?'up':'down'}">${fmtPct(i.pct)}</span>
       </span>`;
+  }
+  /* NO FUND FOR THIS ROW. Rather than leave the widest column empty, fall back
+     to the same constituent-derived envelope the Indian board uses for its
+     eleven sectors that have no matching NSE index: each member's own day low
+     and high as a % move from its own previous close, averaged equal-weight.
+
+     It is drawn MUTED AND DASHED on purpose. This is an envelope, not an
+     index - it treats every member's low as simultaneous, which no real index
+     does - so it must never read as one. Think of it as "how far the average
+     member travelled today", not as a level. */
+  const c = s.constituentRange;
+  if(c && c.highPct > c.lowPct){
+    const raw = (c.curPct - c.lowPct) / (c.highPct - c.lowPct) * 100;
+    const pos = Math.min(100, Math.max(0, raw));
+    /* The current value CAN fall outside the envelope, and when it does the
+       marker must say so rather than resting quietly on an end stop. It means
+       some member's price sits outside its own day range, which is what a
+       snapshot taken before the open looks like: last night's close paired
+       with a day range that has not started yet. Clamping alone would turn
+       that into a confident-looking bar at one extreme. */
+    const out = raw < 0 || raw > 100;
+    const why = s.kind === 'etf'
+      ? `no single fund covers this group`
+      : `sector fund did not load this run`;
+    return `
+      <span class="idx-range synth" title="Equal-weighted envelope of the ${c.basis} members' own day ranges — not an index. Each member's low and high as a % move from its own previous close.${out ? ' The current value sits OUTSIDE this envelope, which means at least one member is priced outside its own day range — usually a snapshot taken before the open.' : ''}">
+        <span class="lo">${fmtPct(c.lowPct)}</span>
+        <span class="bar"><span class="dot${out ? ' out' : ''}" style="left:${pos.toFixed(1)}%"></span></span>
+        <span class="hi">${fmtPct(c.highPct)}</span>
+      </span>
+      <span class="idx-none">${why}<br><span class="sub2">day range averaged from ${c.basis} members${out ? ' · outside the range' : ''}</span></span>`;
   }
   if(s.kind === 'etf'){
     return `<span class="idx-none">no single fund covers this group<br><span class="sub2">equal-weighted across ${s.count} members</span></span>`;

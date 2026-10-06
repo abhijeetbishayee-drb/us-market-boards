@@ -659,3 +659,13 @@
 #chart .trail.muted{ opacity:0.12; }
 #chart .dot.pick{ stroke:var(--text, #e8eaed); stroke-width:1.6px; }
 #chart .trail.pick{ stroke-width:2.1px; opacity:1; }
+
+/* Envelope marker when the current value falls OUTSIDE the averaged range -
+   at least one member priced outside its own day range, which is what a
+   pre-open snapshot looks like. Clamped to the end stop, but never silently:
+   a bar resting confidently at one extreme would be the lie. */
+.idx-range.synth .dot.out{
+  background:var(--accent, #d8a657);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--accent, #d8a657) 28%, transparent);
+  width:6px; height:11px; border-radius:2px;
+}
