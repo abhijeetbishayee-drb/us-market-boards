@@ -86,9 +86,9 @@ def sort_by_pct(rows):
 
 def main():
     force = "--force" in sys.argv
-    if not force and not U.is_market_hours():
+    if not force and U.market_phase() == "stop":
         now = U.now_et()
-        print(f"outside US market hours ({now:%a %H:%M %Z}) — skipping")
+        print(f"outside the refresh window ({now:%a %H:%M %Z}) — skipping")
         return
 
     universe = list(U.SPX_ALL) + list(U.ETF_ALL)

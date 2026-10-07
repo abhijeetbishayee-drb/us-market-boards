@@ -163,8 +163,8 @@ def fetch(spec):
 
 def main() -> int:
     force = "--force" in sys.argv
-    if not force and not U.is_market_hours():
-        print(f"outside US market hours ({U.now_et():%a %H:%M %Z}) — skipping")
+    if not force and U.market_phase() == "stop":
+        print(f"outside the refresh window ({U.now_et():%a %H:%M %Z}) — skipping")
         return 0
 
     today = U.now_et().date()

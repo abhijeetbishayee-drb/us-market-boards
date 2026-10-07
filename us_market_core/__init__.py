@@ -168,6 +168,13 @@ def fetch_all_closes(tickers, workers=16, rng="5y", interval="1d"):
 # reason the rest of this stack settled on: a holiday list that silently goes
 # stale STOPS a board, whereas a chain running on a closed exchange costs a
 # few no-op runs. A missing holiday firing a job has bitten this stack before.
+# The fetchers gate on market_phase() != "stop", NOT on is_market_hours(), and
+# the five minutes past 16:00 are the reason. Gated on the session alone, the
+# last snapshot of the day is taken a minute or so BEFORE the close and the
+# settled closing print is never captured - on 2026-10-06 the board's final
+# reading was 15:47 ET. The pre-open half of the window is harmless: outside
+# the session Yahoo returns the previous close, which is what the board should
+# show before the opening bell anyway.
 CHAIN_WARM = (9, 0)
 CHAIN_STOP = (16, 5)
 
