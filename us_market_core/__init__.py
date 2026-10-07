@@ -178,6 +178,50 @@ def fetch_all_closes(tickers, workers=16, rng="5y", interval="1d"):
 CHAIN_WARM = (9, 0)
 CHAIN_STOP = (16, 5)
 
+# How long the NEXT run should wait before taking over.
+#
+# The chain used to end at `stop` and rely on a morning cron to start the next
+# one. That does not work. Measured on this repo: the starter asks for roughly
+# 60 firings a day (`*/10 12-21 * * 1-5`) and delivered 2 on 2026-10-06 and 0
+# on 2026-10-07 up to 16:11Z -- so on 2026-10-07 the board sat on an 02:18 ET
+# snapshot while the session ran. The chain itself was never the problem; its
+# ignition was.
+#
+# So the chain no longer stops, it IDLES. Outside the session a run does no
+# fetching and simply waits, and the wait is sized to land on the next 09:00 ET
+# warm boundary rather than to tick pointlessly through the night: a handful of
+# long hops cover a weekend. The cap keeps any single sleep short enough that a
+# DST shift, a missed holiday or a clock error self-corrects within one hop
+# instead of overshooting an entire session.
+CHAIN_IDLE_MAX = 45 * 60
+
+
+def _next_warm(now):
+    """The next weekday 09:00 ET strictly after `now`."""
+    nxt = now.replace(hour=CHAIN_WARM[0], minute=CHAIN_WARM[1],
+                      second=0, microsecond=0)
+    while nxt <= now or nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+        nxt = nxt.replace(hour=CHAIN_WARM[0], minute=CHAIN_WARM[1],
+                          second=0, microsecond=0)
+    return nxt
+
+
+def chain_wait_seconds(now=None):
+    """Seconds the next run should sleep before handing off.
+
+    live: none -- the job's own runtime is the ~60s cadence.
+    warm: a short tick, so the chain is already hot at the opening print.
+    stop: long hops onto the next warm boundary.
+    """
+    now = now or now_et()
+    phase = market_phase(now)
+    if phase == "live":
+        return 0
+    if phase == "warm":
+        return 60
+    return max(60, min(CHAIN_IDLE_MAX, int((_next_warm(now) - now).total_seconds())))
+
 
 def market_phase(now=None):
     now = now or now_et()

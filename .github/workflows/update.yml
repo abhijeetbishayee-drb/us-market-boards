@@ -24,14 +24,22 @@ name: Update US boards (minute)
 #   * handoff on `!cancelled()` - NOT `always()`, which would resurrect a
 #     chain that concurrency deliberately collapsed, and NOT `success()`,
 #     which would end the whole trading day on one failed Yahoo fetch.
-#   * a PHASE GATE - a chain with no stop condition runs for ever. The chain
-#     lives 09:00-16:05 ET on weekdays; `schedule` exists only to start it.
+#   * a PHASE GATE - but on the WORK, not on the chain. The chain is perpetual:
+#     outside 09:00-16:05 ET it fetches nothing and idles onto the next open.
+#     It ended at the close until 2026-10-07, and the morning cron that was
+#     supposed to restart it fired 2 times one day and 0 the next against ~60
+#     slots, so the board sat on an overnight snapshot through a live session.
+#     Ignition by `schedule` is the one part of this design that never worked.
+#     The stop condition is now an explicit kill file, `/.chain-off`, which is
+#     a switch someone throws rather than one that fails silently.
 on:
   schedule:
     # Starters only, never the cadence. Several lines because a single cron
     # demonstrably fires zero times, and both US clock offsets are covered
     # (09:00 ET is 13:00 UTC in EDT, 14:00 UTC in EST). A starter that fires
     # in the wrong phase stops immediately and costs nothing.
+    # These are now only a RECOVERY path -- the chain idles through the night
+    # instead of ending, so nothing routine depends on them.
     # Measured 2026-10-06: the four starters below fired nowhere near their
     # slots - the first successful schedule run of the day landed at 18:43Z
     # against a 12:55Z slot, so the chain did not start until 14:43 ET and the
@@ -48,10 +56,6 @@ on:
         description: "Build even outside US market hours"
         required: false
         default: "false"
-      chain_once:
-        description: "Hand off exactly once regardless of phase (to prove the chain works)"
-        required: false
-        default: "false"
 
 permissions:
   contents: write
@@ -64,6 +68,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 75        # covers the longest idle hop (45m) with margin
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,12 +86,14 @@ jobs:
       - name: Work out the market phase
         id: phase
         run: |
-          p=$(python3 -c "import sys; sys.path.insert(0,'.'); \
-            import us_market_core as U; print(U.market_phase())")
+          read -r p w < <(python3 -c "import sys; sys.path.insert(0,'.'); \
+            import us_market_core as U; print(U.market_phase(), U.chain_wait_seconds())")
           echo "phase=$p" >> "$GITHUB_OUTPUT"
-          echo "US market phase: $p"
+          echo "wait=$w"   >> "$GITHUB_OUTPUT"
+          echo "US market phase: $p (next handoff waits ${w}s)"
 
       - name: Fetch the snapshot
+        if: steps.phase.outputs.phase != 'stop'
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             python3 scripts/fetch_data.py --force
@@ -103,6 +110,7 @@ jobs:
       # Open interest only settles overnight, but volume moves all session and
       # the whole chain is one request per underlying.
       - name: Refresh the put-call ratios
+        if: steps.phase.outputs.phase != 'stop'
         run: |
           if [ "${{ github.event.inputs.force }}" = "true" ]; then
             python3 scripts/fetch_pcr.py --force
@@ -112,6 +120,7 @@ jobs:
         continue-on-error: true
 
       - name: Commit if anything changed
+        if: steps.phase.outputs.phase != 'stop'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -174,19 +183,27 @@ jobs:
       # ── hand off to the next run ──────────────────────────────────────
       # LAST step, and the only thing that produces the cadence. See the
       # header for why this is `!cancelled()` rather than always()/success().
+      # Outside the session there is nothing to fetch but the chain must still
+      # survive to the next open, so it waits here rather than ending. Long hops
+      # onto the 09:00 ET boundary, not a tick through the night.
+      - name: Idle until the next phase
+        if: ${{ !cancelled() && steps.phase.outputs.wait != '0' }}
+        run: sleep ${{ steps.phase.outputs.wait }}
+
       - name: Hand off to the next run
         if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          # chain_once is a TEST handle and is bounded by construction: the
-          # handoff dispatches with no inputs, so the run it starts has
-          # chain_once=false and stops at the phase gate. One extra run, never
-          # a runaway chain.
-          if [ "${{ github.event.inputs.chain_once }}" != "true" ] \
-             && [ "${{ steps.phase.outputs.phase }}" = "stop" ]; then
-            echo "phase is stop — chain ends here; a morning cron starts the next one"
+          # THE CHAIN NO LONGER STOPS. It used to end at `stop` and wait for a
+          # morning cron, and the cron did not come: 2 firings on 2026-10-06 and
+          # 0 on 2026-10-07 against ~60 slots a day, so the board sat on an
+          # overnight snapshot through a live session. The stop condition that a
+          # self-chaining workflow needs is now the KILL FILE below rather than
+          # the clock -- an explicit switch instead of an ignition that fails.
+          if [ -f .chain-off ]; then
+            echo "/.chain-off present — chain ends here by request"
             exit 0
           fi
           # RETRY. On 2026-10-06 the chain died at 15:47 ET - thirteen minutes
