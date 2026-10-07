@@ -32,12 +32,16 @@ on:
     # demonstrably fires zero times, and both US clock offsets are covered
     # (09:00 ET is 13:00 UTC in EDT, 14:00 UTC in EST). A starter that fires
     # in the wrong phase stops immediately and costs nothing.
-    - cron: '55 12 * * 1-5'
-    - cron: '5 13 * * 1-5'
-    - cron: '55 13 * * 1-5'
-    - cron: '5 14 * * 1-5'
-    # mid-session recovery, in case a chain dies and no starter is due
-    - cron: '20 15,17,19 * * 1-5'
+    # Measured 2026-10-06: the four starters below fired nowhere near their
+    # slots - the first successful schedule run of the day landed at 18:43Z
+    # against a 12:55Z slot, so the chain did not start until 14:43 ET and the
+    # board missed the first five hours of the session. GitHub simply does not
+    # honour these times. The answer is MANY chances rather than well-chosen
+    # ones: every 10 minutes across the pre-open and the whole session, so a
+    # late or dropped cron costs minutes instead of hours. Each one that fires
+    # while a chain is already running is cancelled by the concurrency group
+    # at no cost, and each one that fires out of phase stops immediately.
+    - cron: '*/10 12-21 * * 1-5'
   workflow_dispatch:
     inputs:
       force:
@@ -117,10 +121,30 @@ jobs:
           fi
           git add board_data.json data/spot.json data/pcr.json
           git commit -m "US boards: $(date -u +%H:%M) UTC snapshot"
-          # The daily job writes to this branch too, and a per-minute writer
-          # that assumes it is alone will eventually lose a race with it.
-          git pull --rebase --autostash origin main
-          git push
+          # The daily job writes to this branch too, and so does the next run
+          # in the chain, so a plain rebase hits a CONFLICT on these files -
+          # which killed a run on 2026-10-06. A conflict between two generated
+          # snapshots is meaningless: this run's data is strictly newer, so it
+          # always wins. `-X theirs` during a rebase favours the commit being
+          # replayed, i.e. ours. Retried, because the branch can move again
+          # between the fetch and the push.
+          for attempt in 1 2 3; do
+            git fetch -q origin main || true
+            if ! git rebase -X theirs origin/main; then
+              git rebase --abort || true
+              echo "rebase failed on attempt $attempt"
+              sleep 2
+              continue
+            fi
+            if git push; then
+              echo "pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "push rejected on attempt $attempt; refetching"
+            sleep 2
+          done
+          echo "::warning::could not push this snapshot; the next run will carry it"
+          exit 0
 
       # ── the daily rebuild rides on THIS cadence, not on `schedule` ──
       # Idempotent by construction: it asks whether the daily workflow has run
@@ -165,6 +189,20 @@ jobs:
             echo "phase is stop — chain ends here; a morning cron starts the next one"
             exit 0
           fi
-          gh workflow run update.yml \
-            && echo "dispatched the next run" \
-            || echo "handoff dispatch failed; a recovery cron will restart the chain"
+          # RETRY. On 2026-10-06 the chain died at 15:47 ET - thirteen minutes
+          # before the close - because this call returned a transient
+          # "HTTP 500 ... /actions/workflows/.../dispatches". A single `||`
+          # fallback swallowed it, the step reported success, and the board
+          # stopped updating for the rest of the session. One server blip must
+          # not cost a trading day, so the dispatch is retried with backoff and
+          # the step FAILS loudly if every attempt is refused.
+          for attempt in 1 2 3 4 5; do
+            if gh workflow run update.yml; then
+              echo "dispatched the next run (attempt $attempt)"
+              exit 0
+            fi
+            echo "dispatch attempt $attempt failed; retrying"
+            sleep $((attempt * 3))
+          done
+          echo "::error::handoff failed 5 times - the chain has stopped and only a cron can restart it"
+          exit 1

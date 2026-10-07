@@ -211,28 +211,65 @@ def build_row(sym, meta, df):
     return row
 
 
-def is_stale() -> bool:
-    """True unless levels.json already covers the latest close.
+# Share of rows allowed to lag the newest session before the file counts as
+# incomplete. Yahoo posts daily bars PER SYMBOL, so a build run soon after the
+# close legitimately catches only some of them.
+INCOMPLETE_FRACTION = 0.01
 
-    Redundant daily crons are only safe if a duplicate is a no-op, and this is
-    what makes it one: three cron lines instead of one is the measured remedy
-    for `schedule` firing zero times, but without this check each extra line
-    would mean another 615-symbol, two-year fetch for an identical result.
+
+def staleness() -> tuple[bool, str]:
+    """(rebuild?, why). Covers BOTH ways levels.json can be out of date.
+
+    Time is the obvious one. Completeness is the one that bit on 2026-10-06:
+    the file was written at 20:55 ET, comfortably after that day's 17:00
+    boundary, so a time-only check called it current - while 88 of its 613
+    rows still carried the PREVIOUS session's bar. Yahoo publishes daily bars
+    per symbol and the stragglers arrive over the following hours (the Indian
+    board sees the same thing, 414 of 747 the next morning). A time-only gate
+    therefore locks the gaps in until the next boundary, which is precisely
+    backwards: the later runs exist to collect exactly those stragglers.
+
+    No infinite-rebuild risk: this only decides whether an ALREADY TRIGGERED
+    run does its work, and the triggers are a handful of crons plus one kick
+    per day. A name that is permanently behind costs a few extra runs, not a
+    loop.
     """
     path = DATA / "levels.json"
     if not path.exists():
-        return True
+        return True, "no levels.json yet"
     try:
-        gen = datetime.fromisoformat(json.loads(path.read_text())["generated_at"])
+        doc = json.loads(path.read_text())
+        gen = datetime.fromisoformat(doc["generated_at"])
+        rows = doc["rows"]
     except Exception:
-        return True
-    return gen.astimezone(U.EXCHANGE_TZ) < U.last_post_close()
+        return True, "levels.json unreadable"
+
+    if gen.astimezone(U.EXCHANGE_TZ) < U.last_post_close():
+        return True, f"written {gen:%Y-%m-%d %H:%M} ET, before the last close"
+
+    dates = [r.get("last_date") for r in rows if r.get("last_date")]
+    if not dates:
+        return True, "no dated rows"
+    newest = max(dates)
+    behind = sum(1 for d in dates if d < newest)
+    if behind > max(1, int(len(dates) * INCOMPLETE_FRACTION)):
+        return True, (f"{behind} of {len(dates)} rows still lag {newest} "
+                      "— Yahoo posts daily bars per symbol, so the stragglers "
+                      "are collected by re-running")
+    return False, f"current for {newest}, {behind} row(s) behind"
+
+
+def is_stale() -> bool:
+    return staleness()[0]
 
 
 def main() -> int:
-    if "--if-stale" in sys.argv and not is_stale():
-        print("levels.json already covers the latest close; skipping")
-        return 0
+    if "--if-stale" in sys.argv:
+        rebuild, why = staleness()
+        if not rebuild:
+            print(f"levels.json {why}; skipping")
+            return 0
+        print(f"rebuilding: {why}")
     meta = {}
     for sym in U.SPX_ALL:
         meta[sym] = {"name": U.display_name(sym), "kind": "stock",
