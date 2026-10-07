@@ -87,6 +87,10 @@
     drawn <strong>muted and dashed</strong> on purpose. It is an <em>envelope</em>, not an index — it
     treats every member&rsquo;s low as simultaneous, which no real index does — so read it as
     &ldquo;how far the average member travelled today&rdquo;, never as a level.
+    <strong>Click an ETF group to open it</strong> and each member shows its own real traded day
+    range, drawn by the same component a sector row uses. No member is promoted to
+    &ldquo;represent&rdquo; its group — the real ranges belong to the funds, so that is where they
+    are shown.
     <br><br>
     <strong>Corporate actions are withheld, never guessed.</strong> A name trading across a split or
     spin-off today has its percentage shown as <strong>NA</strong> and is left out of its sector
@@ -142,23 +146,32 @@ function blocks(){
   return pinned.concat(order(rest), order(etfs));
 }
 
+/* The real traded day range of ONE instrument: low, where it sits now, high,
+   then its ticker, price and change. Used for a sector's SPDR and, unchanged,
+   for each member of an expanded ETF group - so a member row and a sector row
+   are the same component and cannot drift apart. */
+function realRangeHtml(i){
+  if(!(i && i.dayHigh > i.dayLow && i.price !== null && i.price !== undefined)) return '';
+  let pos = (i.price - i.dayLow) / (i.dayHigh - i.dayLow) * 100;
+  pos = Math.min(100, Math.max(0, pos));
+  const up = i.pct >= 0;
+  return `
+    <span class="idx-range" title="${i.label}${i.name ? ' — ' + i.name : ''} day range">
+      <span class="lo">${fmtCompact(i.dayLow)}</span>
+      <span class="bar"><span class="dot" style="left:${pos.toFixed(1)}%"></span></span>
+      <span class="hi">${fmtCompact(i.dayHigh)}</span>
+    </span>
+    <span class="idx-meta">
+      <span class="lbl">${i.label}</span>
+      <span class="px">${i.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
+      <span class="pc ${up?'up':'down'}">${fmtPct(i.pct)}</span>
+    </span>`;
+}
+
 function rangeHtml(s){
   const i = s.index;
   if(i && i.dayHigh > i.dayLow){
-    let pos = (i.price - i.dayLow) / (i.dayHigh - i.dayLow) * 100;
-    pos = Math.min(100, Math.max(0, pos));
-    const up = i.pct >= 0;
-    return `
-      <span class="idx-range" title="${i.label}${i.name ? ' — ' + i.name : ''} day range">
-        <span class="lo">${fmtCompact(i.dayLow)}</span>
-        <span class="bar"><span class="dot" style="left:${pos.toFixed(1)}%"></span></span>
-        <span class="hi">${fmtCompact(i.dayHigh)}</span>
-      </span>
-      <span class="idx-meta">
-        <span class="lbl">${i.label}</span>
-        <span class="px">${i.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-        <span class="pc ${up?'up':'down'}">${fmtPct(i.pct)}</span>
-      </span>`;
+    return realRangeHtml(i);
   }
   /* NO FUND FOR THIS ROW. Rather than leave the widest column empty, fall back
      to the same constituent-derived envelope the Indian board uses for its
@@ -199,13 +212,50 @@ function rangeHtml(s){
   return `<span class="idx-none">sector fund did not load this run</span>`;
 }
 
+/* Which ETF groups are expanded. Kept outside the render so a repaint - and
+   the board repaints every 30s - does not collapse what you just opened. */
+const OPEN = new Set();
+
+/* A group has no single fund, so its summary row can only carry the averaged
+   envelope. The REAL day ranges belong to its members, so the row expands to
+   show one line per member, each drawn by the same component a sector row
+   uses. Nothing is invented: no member is promoted to "represent" the group. */
+function memberRowsHtml(s){
+  const rows = (s.rows || []).slice()
+    .sort((a, b) => (b.pct ?? -999) - (a.pct ?? -999));
+  return `<div class="grp-members">` + rows.map(r => `
+    <a class="sector-row member-row" href="${quoteUrl(r.ticker)}" target="_blank" rel="noopener noreferrer">
+      <span class="nm">${r.ticker}<span class="sub2">${r.full ? ' ' + r.full : ''}</span></span>
+      <span class="vl ${bucket(r.pct)}">${fmtPct(r.pct)}</span>
+      ${realRangeHtml({label: r.ticker, name: r.full, price: r.price,
+                       pct: r.pct, dayLow: r.dayLow, dayHigh: r.dayHigh})
+        || '<span class="idx-none">no day range yet</span>'}
+    </a>`).join('') + `</div>`;
+}
+
 function stripHtml(list){
-  return list.map(s => `
-    <a class="sector-row${s.pinned ? ' pinned' : ''}" href="#${slug(s.sector)}">
-      <span class="nm">${s.sector}</span>
-      <span class="vl ${sectorBucket(shownAvg(s))}">${fmtPct(shownAvg(s))}</span>
-      ${rangeHtml(s)}
-    </a>`).join('');
+  return list.map(s => {
+    const expandable = s.kind === 'etf' && (s.rows || []).length;
+    if(!expandable){
+      return `
+        <a class="sector-row${s.pinned ? ' pinned' : ''}" href="#${slug(s.sector)}">
+          <span class="nm">${s.sector}</span>
+          <span class="vl ${sectorBucket(shownAvg(s))}">${fmtPct(shownAvg(s))}</span>
+          ${rangeHtml(s)}
+        </a>`;
+    }
+    const open = OPEN.has(s.sector);
+    return `
+      <div class="grp-wrap${open ? ' open' : ''}">
+        <button type="button" class="sector-row grp-row" data-grp="${s.sector}"
+                aria-expanded="${open}">
+          <span class="nm"><span class="chev" aria-hidden="true"></span>${s.sector}</span>
+          <span class="vl ${sectorBucket(shownAvg(s))}">${fmtPct(shownAvg(s))}</span>
+          ${rangeHtml(s)}
+        </button>
+        ${open ? memberRowsHtml(s) : ''}
+      </div>`;
+  }).join('');
 }
 
 function blockHtml(s){
@@ -244,6 +294,14 @@ function renderExNote(list){
     + '<em>and</em> by a wide margin from the group median. When a whole group moves together nobody '
     + 'is flagged and the average stands. Nothing is hidden: the tile is still on the board.';
 }
+
+document.getElementById('sectorStrip').addEventListener('click', e => {
+  const btn = e.target.closest('.grp-row');
+  if(!btn) return;
+  const key = btn.getAttribute('data-grp');
+  OPEN.has(key) ? OPEN.delete(key) : OPEN.add(key);
+  paint();
+});
 
 function paint(){
   if(!latest) return;
